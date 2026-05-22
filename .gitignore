@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Generated verification artifacts (rendered page images, HTML report,
+# raw LLM-judge verdicts) — all reproducible via verify_report.py / judge.py
+verify_output/
+
+# Editor / OS / local agent state
+.DS_Store
+.claude/
+.mg-tools/
