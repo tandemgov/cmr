@@ -5,7 +5,7 @@ Two subsystems, run in sequence.
 **`extraction/` — the House Doc extractor.** Extracts structured rows from
 *"List of Reports Which It Is the Duty of Any Officer or Department to Make to
 Congress"* (House Document [CDOC-119hdoc4](data/CDOC-119hdoc4.pdf)) into
-clean, typed records — 3,250 mandates. Deterministic: no LLM, no randomness.
+clean, typed records — 3,297 mandates. Deterministic: no LLM, no randomness.
 
 **`pipeline/` — the GPO comparison.** Joins those mandates against the ~1,057
 packages agencies have filed to GPO's Congressionally Mandated Reports

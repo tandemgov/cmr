@@ -518,6 +518,31 @@ uv run python pipeline/audit.py            # seconds
 
 (Stage 1, the PDF extraction, runs automatically on first invocation of `match.py` if `data/cmra_extract.jsonl` is absent.) `REPORT.md` and `AUDIT.md` are written to `compare_output/`. Total wall-clock time from a clean checkout, end to end, is roughly twenty minutes; total API cost is a few U.S. dollars.
 
+> **Extractor drift.** This paper's mandate count is 3,250. The extractor has
+> since been revised and now yields **3,297** rows from the same PDF. The
+> change is purely additive — all 3,250 rows this paper analyzed are present
+> and unchanged in the new extract, and 47 rows previously missed were
+> recovered (verified 2026-07-25 by running both extractor versions against
+> the same source PDF and diffing on entity + nature + authority).
+>
+> No match this paper reports is affected, and every figure below is left as
+> originally computed and is internally consistent at 3,250. But two
+> consequences are worth stating plainly for anyone re-running this work.
+>
+> First, every ratio taking the mandate count as its denominator moves
+> slightly. The naïve coverage figure of §4.7.1, for instance, becomes
+> `133 / 3,297 = 4.0 percent` rather than `133 / 3,250 = 4.1 percent`.
+>
+> Second, and more substantively, **§8.5 is now wrong about the Nuclear
+> Regulatory Commission.** That section lists the NRC among entities with "no
+> rows at all" in the House Document register, making its filings structurally
+> orphans. The revised extractor recovers 14 NRC mandates — plutonium
+> transport certification, nuclear incident damage surveys, safeguarded-
+> information orders — so that claim, and any orphan attributed to it, needs
+> revisiting. The other entities named in §8.5 are unaffected. Of the 47
+> recovered rows, 24 belong to the Department of Energy, which §10 names as a
+> zero-filing entity, so restating would move that finding against DOE.
+>
 > **Scope note.** The five commands above reproduce the analysis as this paper
 > describes it. The codebase has since grown a second matching strategy —
 > `pipeline/match_v2.py` and `pipeline/match_v2_pass2.py` — which inverts the

@@ -7,7 +7,7 @@ later, jump straight to the section you need.
 ## 1. What this project does (in 30 seconds)
 
 The House Document `CDOC-119hdoc4` lists **every standing report Congress
-requires** from federal entities — 3,250 mandate rows after extraction.
+requires** from federal entities — 3,297 mandate rows after extraction.
 The 2022 Congressionally Mandated Reports Act (CMRA) created a public GPO
 repository where executive-branch agencies must file copies of those reports
 on an ongoing basis — about 1,057 packages since Jan 2024.
@@ -86,7 +86,7 @@ extraction/main.py           pipeline/gpo_fetch.py (~1057 pkgs)
         │                            │
         ▼                            ▼
 data/cmra_extract.jsonl      data/gpo/packages/*.json
-   (3,250 mandates)                  │
+   (3,297 mandates)                  │
         │                            ▼ (derive)
         │                  data/gpo/submissions.jsonl  (one per pkg)
         │                  data/gpo/requirements.jsonl (deduped by req#)
