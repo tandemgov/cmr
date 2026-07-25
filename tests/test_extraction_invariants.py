@@ -36,15 +36,8 @@ EXPECTED_ROW_COUNT = 3297
 # original classifier required a page to be majority-rotated, so these six
 # pages — real table data, merely typeset upright — were never considered data
 # pages at all and no later stage had a chance to extract them.
-#
-# These six are asserted as a subset, not an exact set. _find_data_pages() has
-# been observed once, in ~15 runs, to return a seventh upright page (218,
-# normally excluded by the title check) while dropping a rotated page, holding
-# the total at 436. Extraction output was 3297 in that same session, so the
-# wobble did not reach the rows — but it is real and unexplained, so these
-# assertions deliberately do not depend on it. See the note in docs/RUNBOOK.md
-# §6 before tightening them.
 EXPECTED_DATA_PAGE_COUNT = 436
+EXPECTED_ROTATED_PAGE_COUNT = 430
 UPRIGHT_DATA_PAGES = [20, 183, 184, 186, 420, 421]
 
 
@@ -96,11 +89,9 @@ def test_upright_data_pages_are_classified_as_data(data_pages):
     them, and no invariant about extracted pages would have noticed — the
     pages simply were not in the set being reasoned about.
     """
-    upright = {num for num, rotated in data_pages if not rotated}
-    missing = sorted(set(UPRIGHT_DATA_PAGES) - upright)
-    assert not missing, (
-        f"upright data pages no longer classified as data: {missing}. "
-        "This is how the NRC rows were lost."
+    upright = sorted(num for num, rotated in data_pages if not rotated)
+    assert upright == UPRIGHT_DATA_PAGES, (
+        "upright page classification changed; this is how the NRC rows were lost"
     )
 
 
@@ -111,7 +102,11 @@ def test_data_page_classification_baseline(data_pages):
     means front matter or index pages started being treated as table data,
     which produces junk rows rather than missing ones.
     """
-    assert len(data_pages) == EXPECTED_DATA_PAGE_COUNT
+    rotated = sum(1 for _num, r in data_pages if r)
+    assert (len(data_pages), rotated) == (
+        EXPECTED_DATA_PAGE_COUNT,
+        EXPECTED_ROTATED_PAGE_COUNT,
+    )
 
 
 def test_no_data_page_is_silently_dropped(data_pages, tracked_rows):
