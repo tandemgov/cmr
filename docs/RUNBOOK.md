@@ -234,6 +234,14 @@ checks that an audit run can't do for you.
   Document. Check the former before publishing the latter. Any analysis
   computed against a 3,250-row extract predates this fix.
 
+- **Page classification is stable, but only against a stable input.** The
+  classifier yields 436 data pages, 430 rotated and 6 upright (20, 183, 184,
+  186, 420, 421), and `tests/test_extraction_invariants.py` asserts those
+  numbers exactly. A one-off deviation was observed on 2026-07-25 — a seventh
+  upright page appearing while a rotated one dropped — and traced to the
+  source PDF being edited while the suite ran, not to the extractor. If these
+  assertions fail, check `git status` on `data/` before suspecting the code.
+
 - **GAO submits zero CMRA reports.** CMRA's "Federal agency" definition
   (40 U.S.C. 102, as adopted by the Act) excludes GAO by name, so GAO's 233
   mandates can never appear in CMR. This is not a bug, and those mandates
@@ -285,6 +293,9 @@ checks that an audit run can't do for you.
 | `extraction/main.py`, `extraction/extract.py`, `extraction/schema.py` | House Doc PDF → structured mandates (the existing pipeline) |
 | `pipeline/gpo_fetch.py` | govinfo CMR catalog fetch + JSONL derivation |
 | `pipeline/normalize.py` | Citation parser (USC/PLAW/Stat), agency canonicalizer, text normalizer |
+| `pipeline/authority_parse.py` | Citation parser that *keeps* the subsection path — the addressing layer for statutory text (see §10) |
+| `pipeline/statute_fetch.py` | Fetches the US Code as USLM XML from OLRC release points; resolves each mandate's citation to its operative text |
+| `pipeline/plaw_fetch.py` | Resolves the *uncodified* mandates against govinfo's PLAW collection (public-law text) |
 | `pipeline/cadence.py` | "When-expected" string → cadence label + freshness window |
 | `pipeline/match.py` | The v1 matcher (Stage A / B1 / B2) — outputs candidates + confident matches |
 | `pipeline/match_judge.py` | LLM judge harness (Claude + Gemini) for fuzzy candidates |
@@ -300,6 +311,11 @@ checks that an audit run can't do for you.
 | `data/gpo/packages/*.json` | Raw GPO package summaries (gitignored) |
 | `data/gpo/submissions.jsonl` | One row per GPO package |
 | `data/gpo/requirements.jsonl` | One row per unique requirement number |
+| `data/usc/cache/xml_uscAll@*.zip` | OLRC release-point archive (~108 MB, gitignored) |
+| `data/usc/xml/usc*.xml` | Extracted USLM XML, one file per title (~665 MB, gitignored) |
+| `data/usc/provisions.jsonl` | Every mandate with its citation resolved to statutory text |
+| `data/usc/plaw/cache/PLAW-*.{xml,htm}` | Raw public-law packages (gitignored) |
+| `data/usc/plaw_provisions.jsonl` | The uncodified mandates, resolved to public-law text |
 | `compare_output/REPORT.md` | Human-readable narrative summary |
 | `compare_output/AUDIT.md` | Reviewer audit document (executive summary + 7 systematic checks) |
 | `compare_output/final_matches.jsonl` | The authoritative confident-match set (deterministic + judge-promoted) |
@@ -383,3 +399,134 @@ checks that an audit run can't do for you.
   ~3/sec which is comfortably under. Anthropic and Gemini have their own
   per-key limits — the judge uses 8 workers by default, lower if you see
   429s.
+
+## 10. Resolving mandates to statutory text
+
+The House Doc tells you a mandate exists and cites its authority. It does not
+tell you what the law *says*. `authority_parse.py` + `statute_fetch.py` close
+that gap: they turn each `authority` string into a USLM address and pull the
+operative provision.
+
+```bash
+# One-time corpus fetch (~108 MB zip → ~665 MB XML, idempotent)
+uv run python pipeline/statute_fetch.py --fetch-only
+
+# Resolve every mandate's citation to text (~45s, fully offline)
+uv run python pipeline/statute_fetch.py --resolve-only
+
+# Citation coverage without touching the corpus
+uv run python pipeline/authority_parse.py --stats
+```
+
+The US Code only reaches the codified ~69%. `plaw_fetch.py` covers the rest:
+
+```bash
+# Uncodified mandates → public-law text (~281 packages, ~8 min, resumable)
+uv run python pipeline/plaw_fetch.py
+
+uv run python pipeline/plaw_fetch.py --limit 30    # pilot first
+uv run python pipeline/plaw_fetch.py --resolve-only
+```
+
+**Headline: 3,171 of 3,297 Clerk claims (96.2%) can have their statutory text
+inspected.** Ask for coverage *of the Clerk's claims*, not of USC citations —
+the latter is a flattering denominator that hides the uncodified third.
+
+| Route | Mandates | Share |
+|---|---|---|
+| US Code (`statute_fetch.py`) | 2,261 | 68.6% |
+| Public law (`plaw_fetch.py`) | 910 | 27.6% |
+| **Total inspectable** | **3,171** | **96.2%** |
+| Remaining | 126 | 3.8% |
+
+Codified detail, against release point **PL 119-102**:
+
+| | |
+|---|---|
+| Rows with a USC cite | 2,301 (69.8%) |
+| Citations resolved | 2,261 / 2,301 (98.3%) |
+| — at the exact subsection node | 1,746 |
+| — at a statutory note | 497 |
+| — at section level (subsection path stale/malformed) | 18 |
+| Unresolved: section absent from current law | 15 |
+| Unresolved: note cited but section has no operative notes | 25 |
+| Rows with no USC cite (uncodified) | 996 (30.2%) |
+
+The 126 that remain: **71** cite a title or division but no section
+(`Pub. L. 94-59, title III`), so there is no section to extract; **53** predate
+the 104th Congress and are outside PLAW entirely; **1** is a section the
+extractor could not locate.
+
+### Why OLRC, not govinfo
+
+The Office of the Law Revision Counsel publishes a **release point** after each
+public law, so it tracks current law within days. govinfo's `/bulkdata/USCODE/`
+carries *annual edition* snapshots that can lag by a year, and its
+`/bulkdata/json/USCODE` listing endpoint 404s. `discover_release_point()`
+scrapes the current one; pin an older one with `--release 119-102`.
+
+### Traps
+
+- **En dashes.** USLM writes suffixed section numbers with U+2013
+  (`/us/usc/t12/s635a–5`); the House Doc uses an ASCII hyphen. Fold them
+  (`authority_parse.fold_dashes`) or resolution drops from 99.3% to 91.1% and
+  ~200 live citations masquerade as repealed law.
+- **Subsection case is significant.** `(a)` is a subsection and `(A)` a
+  subparagraph — different depths. `uslm_id` preserves case; only the *lookup*
+  is case-insensitive.
+- **`... note` cites point at uncodified law, not the section.** 523 mandates
+  cite a note. Returning the parent section's body hands you the wrong statute
+  entirely — `10 U.S.C. 2687 note` is a BRAC reporting mandate, while § 2687
+  itself is the base-closure prohibition. The resolver substitutes the
+  section's statutory notes and marks `resolved_at: "note"`.
+- **Notes are mostly drafting apparatus.** Amendment history, effective dates
+  and "References in Text" swamp the operative text. `_APPARATUS_TOPICS` is a
+  *deny* list, so an unrecognized USLM topic is kept rather than silently
+  dropped.
+- **Uncodified law is not in the US Code's statutory notes.** The obvious
+  shortcut — look the uncodified provisions up among the notes, which cite
+  their source Pub. L. — was measured and fails: 93% of gap rows name a
+  section, but only 5.6% appear in any note credit. Fetch PLAW instead.
+- **PLAW and the US Code use different USLM namespaces.** GPO serves
+  `http://schemas.gpo.gov/xml/uslm` (root `pLaw`); OLRC serves
+  `http://xml.house.gov/schemas/uslm/1.0`. Match on local tag names.
+- **govinfo returns 400, not 404, for an unavailable *format*.** Asking for
+  USLM on a pre-113th public law is a Bad Request; treat 400 and 404 alike
+  when probing formats, or the HTML fallback never fires.
+- **Public laws state each section number twice** — once in the table of
+  contents, once at the section. Take the longest match, or you extract a
+  one-line TOC entry.
+- **The 15 unresolved sections are a finding, not a bug.** They are absent from
+  current law — mostly title 50 Atomic Energy Defense sections (2525, 2566,
+  2587, 2590, 2602, 2704, 2750, 2751, 2757) plus `43 U.S.C. 300gg-111`, which
+  the House Doc prints as title 42 on p.215 and title 43 on p.218. Mandates
+  whose statutory basis no longer exists are worth surfacing on their own.
+
+### What this unlocks
+
+`provisions.jsonl` is a labelled corpus: ~2,261 provisions known to create a
+congressional reporting duty, each paired with the Clerk's own `when_expected`
+and `reporting_entity`. Two immediate uses:
+
+1. **Citation audit.** A crude `shall (submit|transmit|…) … to Congress` probe
+   fires on only ~78% of resolved provisions. The rest are mis-scoped cites
+   (the cited subsection isn't the operative one — `2 U.S.C. 807(b)` is the
+   Board's audit report, while the GAO mandate is 807(c)(3)), or duties phrased
+   in ways the probe misses. Triaging that set validates the Clerk's citations.
+2. **Classifier training data** — see §11 before trusting the negatives.
+
+## 11. Caveat on training a mandate classifier
+
+It is tempting to treat "cited by the House Doc" as positive and every other
+US Code provision as negative. **The negatives are not clean.** This project
+exists because the Clerk's list is incomplete; a classifier trained that way
+learns its blind spots.
+
+Measured on the full corpus: the same lexical probe fires on **1.79%** of the
+~404k *uncited* provisions — roughly **7,200** provisions that look like
+congressional reporting mandates but appear nowhere in the House Doc, against a
+list of 3,297. That number is a mixture of genuine omissions, agency-to-agency
+and public-facing reports, and expired one-offs. Separating those three is the
+actual work, and it should be done with an LLM judge over a sample before any
+classifier is fit. Treat ~7,200 as an upper bound on House Doc incompleteness,
+not an estimate of it.

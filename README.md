@@ -13,6 +13,13 @@ collection since January 2024, to ask which required reports were actually
 filed, which are visibly overdue, and which filings tie back to no known
 mandate at all.
 
+The same directory also resolves each mandate's citation to the **actual
+statutory text** — **96.2% of the Clerk's 3,297 claims**, via the current
+Office of the Law Revision Counsel release point for codified law and
+govinfo's PLAW collection for the uncodified third — so you can ask what a
+mandate's authority really says rather than trusting the citation. See
+[RUNBOOK §10](docs/RUNBOOK.md).
+
 Start with **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — it covers the method, how
 to reproduce the comparison, and the known seams. The rest of this file covers
 the extractor only.
@@ -108,6 +115,9 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 | `extraction/verify_report.py` | Renders an HTML report with PDF page images for manual QA |
 | `extraction/judge.py` | LLM-as-judge harness (Claude / Gemini / OpenAI) |
 | `pipeline/` | The GPO/CMRA comparison — see [docs/RUNBOOK.md](docs/RUNBOOK.md) §7 for a per-module map |
+| `pipeline/authority_parse.py` | Citation parser retaining the subsection path — see [RUNBOOK §10](docs/RUNBOOK.md) |
+| `pipeline/statute_fetch.py` | US Code fetch + citation→statutory-text resolution |
+| `pipeline/plaw_fetch.py` | Public-law text for the uncodified mandates |
 | `docs/approach.md` | Technical design document (extractor) |
 | `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
 | `deck/` | `slides.md` (Slidev) and the images it references |
