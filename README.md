@@ -1,8 +1,23 @@
-# cmra — Deterministic extraction of government PDF report tables
+# cmra — Who is complying with the Congressionally Mandated Reports Act?
 
-Extracts structured rows from *"List of Reports Which It Is the Duty of Any
-Officer or Department to Make to Congress"* (House Document
-[CDOC-119hdoc4](data/CDOC-119hdoc4.pdf)) into clean, typed records.
+Two subsystems, run in sequence.
+
+**`extraction/` — the House Doc extractor.** Extracts structured rows from
+*"List of Reports Which It Is the Duty of Any Officer or Department to Make to
+Congress"* (House Document [CDOC-119hdoc4](data/CDOC-119hdoc4.pdf)) into
+clean, typed records — 3,250 mandates. Deterministic: no LLM, no randomness.
+
+**`pipeline/` — the GPO comparison.** Joins those mandates against the ~1,057
+packages agencies have filed to GPO's Congressionally Mandated Reports
+collection since January 2024, to ask which required reports were actually
+filed, which are visibly overdue, and which filings tie back to no known
+mandate at all.
+
+Start with **[docs/RUNBOOK.md](docs/RUNBOOK.md)** to reproduce the comparison,
+or **[docs/WHITEPAPER.md](docs/WHITEPAPER.md)** for the full method and
+findings. The rest of this file covers the extractor only.
+
+## The extractor
 
 Each row is extracted into four fields:
 
@@ -92,7 +107,11 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 | `extraction/verify.py` | Page-tracked extraction + seeded sampling for verification |
 | `extraction/verify_report.py` | Renders an HTML report with PDF page images for manual QA |
 | `extraction/judge.py` | LLM-as-judge harness (Claude / Gemini / OpenAI) |
-| `approach.md` | Technical design document |
+| `pipeline/` | The GPO/CMRA comparison — see [docs/RUNBOOK.md](docs/RUNBOOK.md) §7 for a per-module map |
+| `docs/approach.md` | Technical design document (extractor) |
+| `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
+| `docs/WHITEPAPER.md` | Full method and findings |
+| `deck/` | `slides.md` (Slidev) and the images it references |
 | `data/` | Source PDF |
 | `tests/` | Test suite + fixtures |
 

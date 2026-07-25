@@ -45,6 +45,33 @@ uv run python pipeline/audit.py
 open compare_output/REPORT.md compare_output/AUDIT.md
 ```
 
+That is the v1 flow, and it is where this runbook originally stopped. The v2
+matcher below addresses v1's recall problem — v1 leaves 824 of 1,057 filings
+unmatched — and produces `scoped_compliance.json`, the source of the
+compliance figures in `deck/slides.md`. The whitepaper predates it. Run it
+after `compare.py`:
+
+```bash
+# v2 pass 1: filing-first LLM matching against the filer's House Doc slice
+# (~1057 filings, resumable, LLM cost)
+uv run python pipeline/match_v2.py
+
+# v2 pass 2: corpus-wide rescue for pass-1 "none" verdicts (resumable)
+uv run python pipeline/match_v2_pass2.py
+
+# House Doc gaps: filings whose mandate is absent from the Clerk's list
+uv run python pipeline/gap_report.py
+
+# Compliance within CMRA's actual reach (obligation-screened denominator)
+uv run python pipeline/scoped_compliance.py
+
+open compare_output/housedoc_gaps.md compare_output/scoped_compliance.json
+```
+
+Pilot first if you are changing the matcher — `match_v2.py` takes
+`--orphans-only --sample 25 --seed 42` for a cheap representative run, and
+`--dry-run` to see the prompts without spending anything.
+
 All intermediate files land under `data/gpo/` and `compare_output/` and are
 gitignored. If you only want to rebuild the views without re-fetching,
 `gpo_fetch.py --derive-only` is the move.
@@ -55,7 +82,7 @@ gitignored. If you only want to rebuild the views without re-fetching,
 data/CDOC-119hdoc4.pdf       govinfo.gov API (collection=CMR)
         │                            │
         ▼                            ▼
-   main.py (extract)         gpo_fetch.py (~1057 pkgs)
+extraction/main.py           pipeline/gpo_fetch.py (~1057 pkgs)
         │                            │
         ▼                            ▼
 data/cmra_extract.jsonl      data/gpo/packages/*.json
@@ -86,6 +113,37 @@ data/cmra_extract.jsonl      data/gpo/packages/*.json
                     compare_output/final_matches.jsonl
                     compare_output/overdue_mandates.jsonl
                     compare_output/{mandate,submission}_coverage.jsonl
+                                │
+   ─────────────────────────────┼─────────────────────────────  v2
+                                ▼
+                          match_v2.py  (pass 1)
+   Each GPO filing is the query; the filer's House Doc slice plus
+   government-wide rows goes to the LLM in one call. Deterministic
+   signals corroborate the pick rather than gating it.
+                                │
+                                ▼
+                    compare_output/v2_matches.jsonl
+                                │  (verdict == "none")
+                                ▼
+                        match_v2_pass2.py  (pass 2)
+   Re-asks each "none" against a corpus-wide top-K candidate set ranked
+   by citation overlap + title similarity. Entity mismatch allowed, so
+   cross-entity misattribution in the House Doc is recoverable.
+                                │
+                                ▼
+                    compare_output/v2_pass2.jsonl
+                                │
+                 ┌──────────────┴──────────────┐
+                 ▼                             ▼
+           gap_report.py                scoped_compliance.py
+   Filings with no House Doc row      Compliance within CMRA's actual
+   at all — evidence the Clerk's      reach: post-CMRA statute, covered
+   list is incomplete. Deterministic  entity, deposit due in window.
+   citations only.                    Reads v1 + both v2 passes.
+                 │                             │
+                 ▼                             ▼
+   compare_output/housedoc_gaps.md   compare_output/scoped_compliance.json
+   compare_output/housedoc_gaps.jsonl        (quoted in deck/slides.md)
                     compare_output/orphan_submissions.jsonl
 ```
 
@@ -206,10 +264,14 @@ checks that an audit run can't do for you.
 | `pipeline/gpo_fetch.py` | govinfo CMR catalog fetch + JSONL derivation |
 | `pipeline/normalize.py` | Citation parser (USC/PLAW/Stat), agency canonicalizer, text normalizer |
 | `pipeline/cadence.py` | "When-expected" string → cadence label + freshness window |
-| `pipeline/match.py` | The matcher (Stage A / B1 / B2) — outputs candidates + confident matches |
+| `pipeline/match.py` | The v1 matcher (Stage A / B1 / B2) — outputs candidates + confident matches |
 | `pipeline/match_judge.py` | LLM judge harness (Claude + Gemini) for fuzzy candidates |
 | `pipeline/compare.py` | Consolidates judge verdicts into final outputs + writes `REPORT.md` |
 | `pipeline/audit.py` | Comprehensive reviewer audit — produces `AUDIT.md` |
+| `pipeline/match_v2.py` | v2 pass 1: filing-first LLM matching against the filer's House Doc slice |
+| `pipeline/match_v2_pass2.py` | v2 pass 2: corpus-wide rescue pass for pass-1 "none" verdicts |
+| `pipeline/gap_report.py` | House Doc gap clusters — filings with no mandate row anywhere |
+| `pipeline/scoped_compliance.py` | Obligation-screened compliance rate (the defensible denominator) |
 | `extraction/judge.py`, `extraction/verify.py`, `extraction/verify_report.py` | The pre-existing extraction-accuracy harness (unrelated to the comparison flow) |
 | `data/CDOC-119hdoc4.pdf` | Source House Doc |
 | `data/cmra_extract.jsonl` | Cached House Doc extract (rebuilt on demand) |
@@ -228,15 +290,21 @@ checks that an audit run can't do for you.
 | `compare_output/candidates.jsonl` | Fuzzy candidates fed to the judge |
 | `compare_output/match_judgments.jsonl` | Per-judge verdicts on each candidate |
 | `compare_output/match_summary.json` | Numeric summary of the run |
+| `compare_output/v2_matches.jsonl` | v2 pass-1 verdicts, one row per (package, model); resumable append log |
+| `compare_output/v2_pass2.jsonl` | v2 pass-2 verdicts on pass-1 "none" filings |
+| `compare_output/housedoc_gaps.jsonl` | Gap clusters, classified by strength of the absence evidence |
+| `compare_output/housedoc_gaps.md` | Human-readable gap summary |
+| `compare_output/scoped_compliance.json` | Per-entity compliance within the obligation-screened denominator |
 
 ## 8. Where to push next (ranked by leverage)
 
-1. **Mine orphan submissions for missed matches.** The biggest single source
-   of recall loss is the ~800 orphan submissions. Most are from HHS, DHS,
-   and VA — agencies the matcher already canonicalizes. Sampling 50 orphans
-   and identifying the matcher signal that should have caught each (missing
-   alias? Subagency split? Title wording too different?) will yield concrete
-   fixes worth dozens of recovered matches each.
+1. **Mine the filings that survive both v2 passes as "none".** The original
+   version of this item pointed at v1's ~800 orphan submissions; `match_v2.py`
+   and `match_v2_pass2.py` were built to attack exactly that, so the remaining
+   pool is much smaller and much more interesting. For each survivor, ask
+   which signal should have caught it — missing alias? Subagency split? Title
+   wording too different? — or whether the House Doc genuinely lacks the row,
+   which is what `gap_report.py` exists to classify.
 
 2. **Expand `_ALIASES` in `normalize.py`** based on (1). Every alias added
    automatically improves agency blocking and routinely recovers tens of
@@ -276,6 +344,18 @@ checks that an audit run can't do for you.
 - **`match_judge.py` is resumable** by `(candidate_id, judge)` pair. If you
   change the candidate pool (e.g. the matcher's thresholds), delete
   `compare_output/match_judgments.jsonl` first.
+- **The v2 passes are resumable too**, and carry the same trap in a costlier
+  form. `match_v2.py` skips `(package_id, model)` pairs already in
+  `v2_matches.jsonl`; `match_v2_pass2.py` appends to `v2_pass2.jsonl`. Both
+  files are append logs where the *last* record for a package wins, so a
+  resumed run after a matcher change silently mixes old and new verdicts.
+  Change the prompt, the agency slice, or the candidate ranking and you must
+  delete the corresponding file before re-running — not just re-run it.
+- **Scripts no longer care about your working directory.** Every path is
+  anchored to the repo root via `REPO_ROOT` in each module, so
+  `python pipeline/match.py` behaves identically from anywhere. This was not
+  true before the directory restructure; older shell history that `cd`s to
+  the repo root first is harmless but no longer necessary.
 - **API rate limits.** Data.gov is 1000 req/hour; the fetcher throttles to
   ~3/sec which is comfortably under. Anthropic and Gemini have their own
   per-key limits — the judge uses 8 workers by default, lower if you see

@@ -518,6 +518,22 @@ uv run python pipeline/audit.py            # seconds
 
 (Stage 1, the PDF extraction, runs automatically on first invocation of `match.py` if `data/cmra_extract.jsonl` is absent.) `REPORT.md` and `AUDIT.md` are written to `compare_output/`. Total wall-clock time from a clean checkout, end to end, is roughly twenty minutes; total API cost is a few U.S. dollars.
 
+> **Scope note.** The five commands above reproduce the analysis as this paper
+> describes it. The codebase has since grown a second matching strategy —
+> `pipeline/match_v2.py` and `pipeline/match_v2_pass2.py` — which inverts the
+> join to make each GPO filing the query rather than each mandate, and two
+> analyses built on it: `gap_report.py` and `scoped_compliance.py`.
+>
+> It was written to attack the orphan-pool recall loss this paper reports in
+> §8.1, and it produces a different, higher-recall match set.
+> `scoped_compliance.py` further replaces the denominator used here with an
+> obligation-screened one, so its compliance rate is not comparable to the
+> figures in §6. `gap_report.py` generalizes the register-absent finding of
+> §8.5 into classified evidence that the Clerk's list itself is incomplete.
+>
+> **No figure in this paper has been restated against any of it.** For the v2
+> pipeline and how to run it, see `docs/RUNBOOK.md` §2 and §3.
+
 One honesty note on the word "reproducible": stages 1–4 and 6–7 are deterministic — same inputs, same outputs, byte for byte. Stage 5 is not. LLM verdicts can vary across runs and will certainly vary across model versions, and the judgment file is therefore a *recorded* artifact (published with the dataset, resumable by `(candidate_id, judge)` key) rather than a re-derivable one. A reader can re-run the judges and should expect smallish verdict drift at the margins; every number downstream of judging inherits that caveat. The detailed operator runbook lives in `RUNBOOK.md` alongside this paper.
 
 ---
