@@ -49,13 +49,17 @@ from normalize import (
     token_set,
 )
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 load_dotenv()
 
 logger = logging.getLogger("match_v2")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 
-OUT_DIR = Path("compare_output")
+OUT_DIR = REPO_ROOT / "compare_output"
 V2_MATCHES_PATH = OUT_DIR / "v2_matches.jsonl"
 SUBMISSION_COV_PATH = OUT_DIR / "submission_coverage.jsonl"
 

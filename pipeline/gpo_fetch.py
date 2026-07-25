@@ -34,6 +34,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 load_dotenv()
 
 logger = logging.getLogger("gpo_fetch")
@@ -42,7 +46,7 @@ API_BASE = "https://api.govinfo.gov"
 COLLECTION = "CMR"
 DEFAULT_SINCE = "2024-01-01T00:00:00Z"
 
-OUT_DIR = Path("data/gpo")
+OUT_DIR = REPO_ROOT / "data/gpo"
 PACKAGES_DIR = OUT_DIR / "packages"
 SUBMISSIONS_PATH = OUT_DIR / "submissions.jsonl"
 REQUIREMENTS_PATH = OUT_DIR / "requirements.jsonl"

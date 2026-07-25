@@ -18,6 +18,10 @@ import pdfplumber
 
 from verify import extract_with_page_tracking
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def render_pdf_page_image(pdf_path: Path, page_num: int, out_dir: Path) -> Path:
     """Render a PDF page to PNG, rotated 90° clockwise for readability."""
@@ -82,10 +86,10 @@ def get_raw_chars_for_row(pdf_path: Path, page_num: int, row: dict) -> str:
 
 
 def main():
-    pdf_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/CDOC-119hdoc4.pdf")
+    pdf_path = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO_ROOT / "data/CDOC-119hdoc4.pdf"
     n_samples = int(sys.argv[2]) if len(sys.argv) > 2 else 76
     seed = int(sys.argv[3]) if len(sys.argv) > 3 else 42
-    out_dir = Path("verify_output")
+    out_dir = REPO_ROOT / "verify_output"
     out_dir.mkdir(exist_ok=True)
 
     print(f"Extracting from {pdf_path}...", file=sys.stderr)

@@ -26,9 +26,13 @@ import re
 from cadence import classify, cmra_exempt_reason, freshness_days, in_cmra_window
 from normalize import agency_key
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 logger = logging.getLogger("compare")
 
-OUT_DIR = Path("compare_output")
+OUT_DIR = REPO_ROOT / "compare_output"
 SUMMARY_PATH = OUT_DIR / "match_summary.json"
 MATCHES_PATH = OUT_DIR / "matches.jsonl"
 CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
@@ -518,7 +522,7 @@ def write_report(
     # Consistency check: final_matches.jsonl rows should agree with the
     # attachment count in mandate_coverage — both are one row per
     # (mandate, package). If they drift, something double- or under-counted.
-    final_matches_path = Path("compare_output/final_matches.jsonl")
+    final_matches_path = REPO_ROOT / "compare_output/final_matches.jsonl"
     final_rows = load_jsonl(final_matches_path)
     substantive_match_count = sum(1 for fm in final_rows if not fm.get("is_umbrella"))
     if substantive_match_count != substantive_attachments:
@@ -542,7 +546,7 @@ def write_report(
     # CRA filing process (requirement#8070 tag, 5 U.S.C. 801 reference, or a
     # rule-shaped title). Not substantive mandate matches, but real
     # procedural compliance worth reporting.
-    raw_subs = load_jsonl(Path("data/gpo/submissions.jsonl"))
+    raw_subs = load_jsonl(REPO_ROOT / "data/gpo/submissions.jsonl")
     cra_packages: set[str] = {
         sub["package_id"] for sub in raw_subs if is_cra_procedural(sub)
     }
@@ -898,7 +902,7 @@ def main() -> None:
     judgments = load_jsonl(JUDGMENTS_PATH)
     judge_verdicts = consolidate_judgments(judgments)
 
-    raw_submissions = load_jsonl(Path("data/gpo/submissions.jsonl"))
+    raw_submissions = load_jsonl(REPO_ROOT / "data/gpo/submissions.jsonl")
     confident, promoted, a_validation_rejected = write_final_matches(matches, candidates, judge_verdicts, raw_submissions)
     # Build map of judge-promoted Stage A requirement→mandate matches so we
     # can wire their submissions into mandate_coverage.

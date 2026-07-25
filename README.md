@@ -26,7 +26,7 @@ The source PDF has three properties that defeat conventional extraction:
    spatial position, not cell borders, so Tabula/Camelot find no table.
 
 The approach is **deterministic first**: every step that can be rule-based is.
-See [approach.md](approach.md) for the full pipeline design.
+See [approach.md](docs/approach.md) for the full pipeline design.
 
 ## Install
 
@@ -86,12 +86,12 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 
 | Path | Purpose |
 |---|---|
-| `extract.py` | The deterministic extraction pipeline (core) |
-| `schema.py` | The `Report` Pydantic model |
-| `main.py` | CLI entry point (`cmra`) |
-| `verify.py` | Page-tracked extraction + seeded sampling for verification |
-| `verify_report.py` | Renders an HTML report with PDF page images for manual QA |
-| `judge.py` | LLM-as-judge harness (Claude / Gemini / OpenAI) |
+| `extraction/extract.py` | The deterministic extraction pipeline (core) |
+| `extraction/schema.py` | The `Report` Pydantic model |
+| `extraction/main.py` | CLI entry point (`cmra`) |
+| `extraction/verify.py` | Page-tracked extraction + seeded sampling for verification |
+| `extraction/verify_report.py` | Renders an HTML report with PDF page images for manual QA |
+| `extraction/judge.py` | LLM-as-judge harness (Claude / Gemini / OpenAI) |
 | `approach.md` | Technical design document |
 | `data/` | Source PDF |
 | `tests/` | Test suite + fixtures |
@@ -100,10 +100,10 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 
 ```bash
 # Render a manual-QA HTML report (writes verify_output/, git-ignored)
-uv run python verify_report.py
+uv run python extraction/verify_report.py
 
 # Run the LLM-judge audit (needs API keys in .env; see judge.py header)
-uv run python judge.py --samples 300 --judges claude,gemini
+uv run python extraction/judge.py --samples 300 --judges claude,gemini
 ```
 
 `verify_output/` (rendered images, HTML report, raw judge verdicts) is

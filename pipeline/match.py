@@ -44,6 +44,10 @@ from normalize import (
     token_set,
 )
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 logger = logging.getLogger("match")
 
 # How many qualifying Stage B1 mandates per package go to the LLM judge.
@@ -52,14 +56,14 @@ logger = logging.getLogger("match")
 B1_TOP_K = 3
 
 # Inputs
-EXTRACT_PATH = Path("data/cmra_extract.jsonl")  # cached House Doc extract
-PDF_PATH = Path("data/CDOC-119hdoc4.pdf")
-REQS_PATH = Path("data/gpo/requirements.jsonl")
-SUBS_PATH = Path("data/gpo/submissions.jsonl")
-PKG_DIR = Path("data/gpo/packages")
+EXTRACT_PATH = REPO_ROOT / "data/cmra_extract.jsonl"  # cached House Doc extract
+PDF_PATH = REPO_ROOT / "data/CDOC-119hdoc4.pdf"
+REQS_PATH = REPO_ROOT / "data/gpo/requirements.jsonl"
+SUBS_PATH = REPO_ROOT / "data/gpo/submissions.jsonl"
+PKG_DIR = REPO_ROOT / "data/gpo/packages"
 
 # Outputs
-OUT_DIR = Path("compare_output")
+OUT_DIR = REPO_ROOT / "compare_output"
 MATCHES_PATH = OUT_DIR / "matches.jsonl"
 CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
 UNCOVERED_PATH = OUT_DIR / "uncovered_mandates.jsonl"
@@ -74,13 +78,13 @@ SUMMARY_PATH = OUT_DIR / "match_summary.json"
 
 
 def ensure_extract() -> list[dict]:
-    """Run main.py to (re)build the House Doc extract cache if missing."""
+    """Run extraction/main.py to (re)build the House Doc extract cache if missing."""
     if not EXTRACT_PATH.exists():
         EXTRACT_PATH.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Building House Doc extract → %s", EXTRACT_PATH)
         with open(EXTRACT_PATH, "w") as out:
             subprocess.run(
-                [sys.executable, "main.py", str(PDF_PATH)],
+                [sys.executable, str(REPO_ROOT / "extraction" / "main.py"), str(PDF_PATH)],
                 check=True,
                 stdout=out,
             )

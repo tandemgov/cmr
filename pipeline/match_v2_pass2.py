@@ -51,11 +51,15 @@ from match_v2 import (
 )
 from normalize import jaccard, parse_citations, token_set
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 load_dotenv()
 
 logger = logging.getLogger("match_v2_pass2")
 
-OUT_DIR = Path("compare_output")
+OUT_DIR = REPO_ROOT / "compare_output"
 PASS1_PATH = OUT_DIR / "v2_matches.jsonl"
 PASS2_PATH = OUT_DIR / "v2_pass2.jsonl"
 

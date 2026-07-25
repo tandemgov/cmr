@@ -36,6 +36,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 load_dotenv()
 
 logger = logging.getLogger("match_judge")
@@ -43,7 +47,7 @@ logger = logging.getLogger("match_judge")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
-OUT_DIR = Path("compare_output")
+OUT_DIR = REPO_ROOT / "compare_output"
 CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
 JUDGMENTS_PATH = OUT_DIR / "match_judgments.jsonl"
 

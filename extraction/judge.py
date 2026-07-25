@@ -46,13 +46,17 @@ load_dotenv()  # picks up keys from .env in the current directory
 from verify import extract_with_page_tracking
 from verify_report import render_pdf_page_image
 
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 logger = logging.getLogger("judge")
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
-OUT_DIR = Path("verify_output")
+OUT_DIR = REPO_ROOT / "verify_output"
 JUDGMENTS_PATH = OUT_DIR / "llm_judgments.jsonl"
 
 SYSTEM_PROMPT = """You are evaluating whether an automated PDF extraction is correct.

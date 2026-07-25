@@ -46,7 +46,11 @@ from pathlib import Path
 from match import ensure_extract
 from normalize import parse_citations
 
-OUT_DIR = Path("compare_output")
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+OUT_DIR = REPO_ROOT / "compare_output"
 PASS1_PATH = OUT_DIR / "v2_matches.jsonl"
 PASS2_PATH = OUT_DIR / "v2_pass2.jsonl"
 GAPS_JSONL = OUT_DIR / "housedoc_gaps.jsonl"

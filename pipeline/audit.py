@@ -28,7 +28,11 @@ from pathlib import Path
 from cadence import classify, in_cmra_window
 from normalize import agency_key, canonicalize_agency, parse_citations, jaccard, token_set
 
-OUT_DIR = Path("compare_output")
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+OUT_DIR = REPO_ROOT / "compare_output"
 AUDIT_PATH = OUT_DIR / "AUDIT.md"
 TODAY = date.today()
 
@@ -605,10 +609,10 @@ def render(checks: dict) -> str:
 
 
 def main() -> None:
-    mandates = load_jsonl(Path("data/cmra_extract.jsonl"))
+    mandates = load_jsonl(REPO_ROOT / "data/cmra_extract.jsonl")
     for i, m in enumerate(mandates):
         m["mandate_id"] = f"M{i:05d}"
-    submissions = load_jsonl(Path("data/gpo/submissions.jsonl"))
+    submissions = load_jsonl(REPO_ROOT / "data/gpo/submissions.jsonl")
     final_matches = load_jsonl(OUT_DIR / "final_matches.jsonl")
     candidates = load_jsonl(OUT_DIR / "candidates.jsonl")
     judgments = load_jsonl(OUT_DIR / "match_judgments.jsonl")

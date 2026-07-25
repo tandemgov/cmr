@@ -39,7 +39,11 @@ from cadence import cmra_exempt_reason, in_cmra_window
 from match import ensure_extract, load_jsonl
 from normalize import parse_citations
 
-OUT_DIR = Path("compare_output")
+# Repo-root anchored so these scripts run correctly from any working
+# directory, not just the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+OUT_DIR = REPO_ROOT / "compare_output"
 OUT_PATH = OUT_DIR / "scoped_compliance.json"
 
 CMRA_CONGRESS, CMRA_NUMBER = 117, 263  # Pub. L. 117-263, Dec 23 2022

@@ -15,8 +15,14 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+# Inert: uv does not install scripts for unpackaged projects, so `uv run cmra`
+# does not work here (see docs/RUNBOOK.md §9). Kept pointing at the real entry
+# point so it becomes correct the moment packaging config is added.
 [project.scripts]
-cmra = "main:main"
+cmra = "extraction.main:main"
 
+# The pipeline is a set of standalone scripts rather than an installed package;
+# both script directories go on the path so intra-directory imports
+# (`from normalize import ...`, `from extract import ...`) resolve under pytest.
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["extraction", "pipeline"]

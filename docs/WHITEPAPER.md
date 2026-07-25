@@ -509,11 +509,11 @@ The full pipeline is released as source code. End-to-end reproduction requires:
 The five operative commands are:
 
 ```
-uv run python gpo_fetch.py        # ~6 minutes, resumable
-uv run python match.py            # ~5 seconds
-uv run python match_judge.py      # ~15 minutes, a few dollars
-uv run python compare.py          # seconds
-uv run python audit.py            # seconds
+uv run python pipeline/gpo_fetch.py        # ~6 minutes, resumable
+uv run python pipeline/match.py            # ~5 seconds
+uv run python pipeline/match_judge.py      # ~15 minutes, a few dollars
+uv run python pipeline/compare.py          # seconds
+uv run python pipeline/audit.py            # seconds
 ```
 
 (Stage 1, the PDF extraction, runs automatically on first invocation of `match.py` if `data/cmra_extract.jsonl` is absent.) `REPORT.md` and `AUDIT.md` are written to `compare_output/`. Total wall-clock time from a clean checkout, end to end, is roughly twenty minutes; total API cost is a few U.S. dollars.
