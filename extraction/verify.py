@@ -15,8 +15,10 @@ from extract import (
     _chars_to_text,
     _deduplicate_chars,
     _detect_column_boundaries,
+    _detect_layout_upright,
     _detect_title_cutoff,
     _extract_page,
+    _extract_page_upright,
     _filter_dot_leaders,
     _filter_page_number_chars,
     _find_data_pages,
@@ -27,25 +29,40 @@ from schema import Report
 
 
 def extract_with_page_tracking(pdf_path: str | Path) -> list[dict]:
-    """Like extract() but includes page numbers in the output."""
+    """Like extract() but includes page numbers in the output.
+
+    Mirrors extract()'s per-page branching: rotated pages and upright pages
+    take different extraction paths. Keep the two in step — this function
+    silently lost every upright page when that path was added to extract().
+    """
     pdf_path = Path(pdf_path)
     with pdfplumber.open(pdf_path) as pdf:
         data_pages = _find_data_pages(pdf.pages)
         if not data_pages:
             return []
 
-        title_cutoff = _detect_title_cutoff(data_pages[0][1])
-        last_good_boundaries = _detect_column_boundaries(data_pages[0][1])
+        first_rotated = next((p for _, p, rot in data_pages if rot), None)
+        first_data_page = first_rotated if first_rotated is not None else data_pages[0][1]
+        title_cutoff = _detect_title_cutoff(first_data_page)
+        last_good_boundaries = _detect_column_boundaries(first_data_page)
 
         all_page_rows: list[dict] = []
-        for page_num, page in data_pages:
-            col_boundaries = _detect_column_boundaries(
-                page, fallback=last_good_boundaries
-            )
-            if col_boundaries != last_good_boundaries:
-                last_good_boundaries = col_boundaries
+        last_upright_layout: tuple[tuple[float, float], float] | None = None
+        for page_num, page, is_rotated in data_pages:
+            if is_rotated:
+                col_boundaries = _detect_column_boundaries(
+                    page, fallback=last_good_boundaries
+                )
+                if col_boundaries != last_good_boundaries:
+                    last_good_boundaries = col_boundaries
+                page_rows = _extract_page(page, page_num, col_boundaries, title_cutoff)
+            else:
+                layout = _detect_layout_upright(page, fallback=last_upright_layout)
+                if layout is None:
+                    continue
+                last_upright_layout = layout
+                page_rows = _extract_page_upright(page, page_num, *layout)
 
-            page_rows = _extract_page(page, page_num, col_boundaries, title_cutoff)
             # Tag each row with its page number
             for row in page_rows:
                 row["_page"] = page_num
