@@ -22,6 +22,19 @@ wheels/
 # raw LLM-judge verdicts) — all reproducible via verify_report.py / judge.py
 verify_output/
 
+# Generated GPO comparison artifacts (cached govinfo CMR packages,
+# derived views, match output) — reproducible via gpo_fetch.py / match.py / compare.py
+data/gpo/
+compare_output/
+
+# Cached House Doc extract — deterministically rebuilt from the tracked PDF
+# by match.py on first run if absent.
+data/cmra_extract.jsonl
+
+# Slidev build cache, written into the repo root when the deck is served
+# from here via `npx slidev slides.md`.
+node_modules/
+
 # Editor / OS / local agent state
 .DS_Store
 .claude/
