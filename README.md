@@ -13,9 +13,9 @@ collection since January 2024, to ask which required reports were actually
 filed, which are visibly overdue, and which filings tie back to no known
 mandate at all.
 
-Start with **[docs/RUNBOOK.md](docs/RUNBOOK.md)** to reproduce the comparison,
-or **[docs/WHITEPAPER.md](docs/WHITEPAPER.md)** for the full method and
-findings. The rest of this file covers the extractor only.
+Start with **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — it covers the method, how
+to reproduce the comparison, and the known seams. The rest of this file covers
+the extractor only.
 
 ## The extractor
 
@@ -55,11 +55,11 @@ uv sync
 
 ```bash
 # Extract to stdout (JSON Lines, one record per row)
-uv run cmra data/CDOC-119hdoc4.pdf
+uv run python extraction/main.py data/CDOC-119hdoc4.pdf
 
 # Other formats and an output file
-uv run cmra data/CDOC-119hdoc4.pdf --format csv  -o reports.csv
-uv run cmra data/CDOC-119hdoc4.pdf --format json -o reports.json
+uv run python extraction/main.py data/CDOC-119hdoc4.pdf --format csv  -o reports.csv
+uv run python extraction/main.py data/CDOC-119hdoc4.pdf --format json -o reports.json
 ```
 
 The full document extracts to **3,297 rows**.
@@ -103,14 +103,13 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 |---|---|
 | `extraction/extract.py` | The deterministic extraction pipeline (core) |
 | `extraction/schema.py` | The `Report` Pydantic model |
-| `extraction/main.py` | CLI entry point (`cmra`) |
+| `extraction/main.py` | CLI entry point (stdout / `--format` / `-o`) |
 | `extraction/verify.py` | Page-tracked extraction + seeded sampling for verification |
 | `extraction/verify_report.py` | Renders an HTML report with PDF page images for manual QA |
 | `extraction/judge.py` | LLM-as-judge harness (Claude / Gemini / OpenAI) |
 | `pipeline/` | The GPO/CMRA comparison — see [docs/RUNBOOK.md](docs/RUNBOOK.md) §7 for a per-module map |
 | `docs/approach.md` | Technical design document (extractor) |
 | `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
-| `docs/WHITEPAPER.md` | Full method and findings |
 | `deck/` | `slides.md` (Slidev) and the images it references |
 | `data/` | Source PDF |
 | `tests/` | Test suite + fixtures |

@@ -3,7 +3,7 @@ theme: seriph
 background: '#f8fafc'
 title: Evaluating CMRA Compliance
 info: |
-  4-minute version. Full detail in WHITEPAPER.md.
+  4-minute version. Full detail in docs/RUNBOOK.md.
 class: text-center
 highlighter: shiki
 transition: slide-left

@@ -212,6 +212,28 @@ checks that an audit run can't do for you.
 
 ## 6. Known limitations & where the seams are
 
+- **The extractor's output changed once, additively, and it mattered.** An
+  early version of `extraction/extract.py` produced 3,250 mandate rows; the
+  current one produces 3,297. The difference is purely additive — all 3,250
+  original rows survive unchanged and 47 previously-missed rows were
+  recovered, none lost (verified 2026-07-25 by running both versions against
+  the same PDF and diffing on entity + nature + authority). Of the 47, 24 are
+  Department of Energy and 14 are Nuclear Regulatory Commission.
+
+  The NRC rows are the cautionary tale. Before they were recovered, the NRC
+  had no rows at all in the extract, so all 7 of its GPO filings were
+  structural orphans — unmatchable by construction, and easy to read as an
+  agency that files without any mandate behind it. With the rows present, v2
+  matches 3 of the 7, and 2 of those land directly on recovered rows
+  (M03162 hiring/vacancies, M03159 licensing status). The third is the CRA
+  umbrella row, which is procedural rather than substantive. Four remain
+  genuinely unmatched.
+
+  The lesson for anyone re-running this: an entity with zero extract rows is
+  a claim about the extractor at least as much as a claim about the House
+  Document. Check the former before publishing the latter. Any analysis
+  computed against a 3,250-row extract predates this fix.
+
 - **GAO submits zero CMRA reports.** CMRA's "Federal agency" definition
   (40 U.S.C. 102, as adopted by the Act) excludes GAO by name, so GAO's 233
   mandates can never appear in CMR. This is not a bug, and those mandates
@@ -332,9 +354,10 @@ checks that an audit run can't do for you.
 
 ## 9. Gotchas
 
-- **`uv run cmra`** doesn't work in this repo (the `[project.scripts]`
-  entry exists but uv doesn't install scripts for unpackaged projects).
-  Use `uv run python extraction/main.py …` instead.
+- **There is no `cmra` console command.** Every entry point is invoked as
+  `uv run python <dir>/<script>.py`. A `[project.scripts]` entry used to
+  exist but never worked — uv does not install scripts for unpackaged
+  projects — so it was removed rather than left as a trap.
 - **`VIRTUAL_ENV`** may be stale (`/Users/.../Coding/...` vs
   `/Users/.../Sync/...`). Prefix shell commands with `unset VIRTUAL_ENV`
   if uv warns.
