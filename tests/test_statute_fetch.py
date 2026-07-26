@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 import statute_fetch as sf
+from authority_parse import PlawRef as sf_plaw, StatRef as sf_stat
 
 USLM = """<?xml version="1.0" encoding="UTF-8"?>
 <uscDoc xmlns="http://xml.house.gov/schemas/uslm/1.0">
@@ -40,7 +41,8 @@ USLM = """<?xml version="1.0" encoding="UTF-8"?>
     <note topic="editorialNotes" role="crossHeading">Editorial Notes</note>
     <note topic="referencesInText">References in Text The Act referred to in subsec. (f) is Pub. L. 91-190.</note>
     <note topic="statutoryNotes" role="crossHeading">Statutory Notes and Related Subsidiaries</note>
-    <note topic="miscellaneous">Congressional Award Program The Board shall transmit to Congress a plan describing the program.</note>
+    <note topic="miscellaneous">Congressional Award Program Pub. L. 116–260, title I, § 102, Dec. 27, 2020, 134 Stat. 2761, provided that: The Board shall transmit to Congress a plan describing the program.</note>
+    <note topic="miscellaneous">Unrelated Pilot Program Pub. L. 999–1, title II, § 7, Jan. 1, 2001, 100 Stat. 1, provided that: The Secretary may conduct a pilot program at three locations.</note>
    </notes>
   </section>
   <section identifier="/us/usc/t2/s808">
@@ -194,6 +196,26 @@ class TestResolveMandates:
         assert "shall transmit to Congress a plan" in p["text"]
         assert "shall enter into a contract" not in p["text"]
 
+    def test_note_citation_selects_by_public_law_credit(self):
+        """A section's other notes must not drown the one actually cited."""
+        p = self._resolve("2 U.S.C. 807 note; Pub. L. 116-260")
+        assert p["note_selection"] == "plaw_credit"
+        assert p["note_count"] == 1
+        assert "Unrelated Pilot Program" not in p["text"]
+
+    def test_note_citation_selects_by_statutes_at_large_when_no_plaw_match(self):
+        p = self._resolve("2 U.S.C. 807 note; (100 Stat. 1)")
+        assert p["note_selection"] == "stat_credit"
+        assert "Unrelated Pilot Program" in p["text"]
+
+    def test_unmatched_note_returns_everything_but_is_flagged(self):
+        """Returning all notes is honest fallback, not an exact resolution."""
+        p = self._resolve("2 U.S.C. 807 note; Pub. L. 42-42")
+        assert p["resolved_at"] == "note_unmatched"
+        assert p["note_selection"] == "unmatched_all"
+        assert p["note_count"] == 2
+        assert p["resolved"] is True
+
     def test_missing_subsection_falls_back_to_the_section(self):
         p = self._resolve("2 U.S.C. 807(z)")
         assert p["resolved_at"] == "section"
@@ -217,6 +239,42 @@ class TestResolveMandates:
         assert rows[0]["provisions"] == []
         assert rows[0]["is_codified"] is False
         assert rows[0]["plaw"] == ["Pub. L. 117-328"]
+
+
+class TestSelectNotes:
+    """Unit-level checks on the note picker, independent of XML plumbing."""
+
+    @staticmethod
+    def _notes(*texts):
+        return [{"topic": "miscellaneous", "role": "", "text": t} for t in texts]
+
+    def test_matches_a_credit_written_with_an_en_dash(self):
+        """USLM prints credits as 'Pub. L. 115–232' (en dash); cites use hyphen."""
+        notes = self._notes("Base Realignment Pub. L. 115–232, § 2702, 132 Stat. 2257, provided")
+        got, how = sf.select_notes(notes, [sf_plaw(115, 232)], [])
+        assert how == "plaw_credit" and len(got) == 1
+
+    def test_prefers_public_law_over_statutes_at_large(self):
+        notes = self._notes(
+            "A Pub. L. 100-1, 90 Stat. 5, provided",
+            "B Pub. L. 200-2, 99 Stat. 9, provided",
+        )
+        got, how = sf.select_notes(notes, [sf_plaw(200, 2)], [sf_stat(90, 5)])
+        assert how == "plaw_credit"
+        assert got[0]["text"].startswith("B")
+
+    def test_returns_every_matching_note_when_several_share_a_credit(self):
+        notes = self._notes("A Pub. L. 110-5 provided", "B Pub. L. 110-5 provided", "C Pub. L. 99-9")
+        got, how = sf.select_notes(notes, [sf_plaw(110, 5)], [])
+        assert how == "plaw_credit" and len(got) == 2
+
+    def test_no_notes_reports_none(self):
+        assert sf.select_notes([], [sf_plaw(1, 1)], []) == ([], "none")
+
+    def test_no_citations_at_all_falls_back_to_everything(self):
+        notes = self._notes("A Pub. L. 100-1 provided")
+        got, how = sf.select_notes(notes, [], [])
+        assert how == "unmatched_all" and len(got) == 1
 
 
 class TestTitleFileMapping:

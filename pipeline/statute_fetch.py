@@ -262,6 +262,44 @@ def build_title_index(path: Path) -> tuple[dict[str, dict], dict[str, dict]]:
     return exact, folded
 
 
+def select_notes(notes: list[dict], plaw: list, stat: list) -> tuple[list[dict], str]:
+    """Pick the statutory note the citation actually points at.
+
+    A busy section carries many notes, so returning all of them buries the cited
+    provision — ``49 U.S.C. 47101 note`` came back as "Runway Length in Alaska"
+    (Pub. L. 118-63, 2024) instead of the runway-safety-alert mandate it means.
+
+    Every note opens with a credit naming its source (``Pub. L. 115–232, div. B,
+    title XXVII, §§ 2702, 2703, Aug. 13, 2018, 132 Stat. 2257``) and the
+    authority string names the same public law, so match on that. Statutes at
+    Large volume/page is the fallback, since a few credits carry only that.
+
+    Returns ``(notes, how)``; ``how`` records which signal fired so the
+    imprecise cases stay visible instead of silently looking exact.
+    """
+    if not notes:
+        return [], "none"
+
+    def matches(text: str, needles: list[str]) -> bool:
+        folded = fold_dashes(text)
+        return any(n in folded for n in needles)
+
+    pl_needles = [f"Pub. L. {p.congress}-{p.number}" for p in plaw]
+    if pl_needles:
+        hits = [n for n in notes if matches(n["text"], pl_needles)]
+        if hits:
+            return hits, "plaw_credit"
+
+    st_needles = [f"{s.volume} Stat. {s.page}" for s in stat]
+    if st_needles:
+        hits = [n for n in notes if matches(n["text"], st_needles)]
+        if hits:
+            return hits, "stat_credit"
+
+    # Nothing matched: keep every note rather than guess, but say so.
+    return notes, "unmatched_all"
+
+
 def resolve_mandates(mandates: list[dict]) -> list[dict]:
     """Resolve every mandate's USC citations to statutory text.
 
@@ -322,10 +360,17 @@ def resolve_mandates(mandates: list[dict]) -> list[dict]:
             # "10 U.S.C. 2687 note" (a BRAC reporting mandate) would come back as
             # the text of § 2687 itself.
             if ref.is_note and hit:
-                notes = hit.get("statutory_notes") or []
+                notes, how = select_notes(hit.get("statutory_notes") or [], auth.plaw, auth.stat)
                 prov["text"] = "\n\n".join(n["text"] for n in notes)
                 prov["heading"] = f"Statutory notes to {hit.get('section_heading', '')}".strip()
-                prov["resolved_at"] = "note" if notes else "note_absent"
+                prov["note_selection"] = how
+                prov["note_count"] = len(notes)
+                # "unmatched_all" means we could not tell which note was meant and
+                # returned every one; that text is low-precision, not exact.
+                prov["resolved_at"] = {
+                    "none": "note_absent",
+                    "unmatched_all": "note_unmatched",
+                }.get(how, "note")
                 prov["resolved"] = bool(notes)
             provisions.append(prov)
         out.append({
@@ -356,7 +401,8 @@ def summarize(rows: list[dict]) -> dict:
         "citations_total": len(all_p),
         "citations_resolved": sum(1 for p in all_p if p["resolved"]),
         "  at_exact_node": at("exact"),
-        "  at_statutory_note": at("note"),
+        "  at_statutory_note (matched)": at("note"),
+        "  at_statutory_note (unmatched)": at("note_unmatched"),
         "  at_section_fallback": at("section"),
         "unresolved_section_missing": at("none"),
         "unresolved_note_absent": at("note_absent"),

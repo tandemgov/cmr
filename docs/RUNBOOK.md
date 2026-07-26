@@ -530,3 +530,120 @@ and public-facing reports, and expired one-offs. Separating those three is the
 actual work, and it should be done with an LLM judge over a sample before any
 classifier is fit. Treat ~7,200 as an upper bound on House Doc incompleteness,
 not an estimate of it.
+
+## 12. Finding mandates the Clerk's list misses
+
+§11 warns against training a classifier on "uncited = negative". `mandate_classify.py`
+avoids that by never fitting a model: it gates candidates deterministically,
+judges each with a local open-weight LLM, and measures the judge against an
+adjudicated gold set.
+
+```bash
+# All four judge models live on their own ports; :4000 is the wrong one (below)
+uv run python pipeline/mandate_classify.py --pilot --negatives 8000 --judge-n 300
+```
+
+### Measured performance
+
+| stage | mechanism | recall | volume |
+|---|---|---|---|
+| 1. recipient gate | regex, `passes_gate()` | **99.1%** | 546,625 → **37,141** (6.8%) |
+| 2. sweep | nemotron, thinking off | **95.6%** (prec 82.6%) | — |
+| 3. confirm | gemma-26B | 93.9% (prec **94.7%**) | — |
+
+End-to-end recall ≈ 94.7%; the sweep is 8–10 h of local compute. Recall is
+weighted over precision throughout, because a false positive is rejected
+downstream while a false negative is invisible in a 546k-provision corpus.
+
+Ground truth is `data/gold/mandate_gold.json` — 467 rows (212 positive), Claude-
+adjudicated, stratified over known Clerk mandates plus gate-passing and
+gate-failing provisions. It cost real API spend; reuse it rather than rebuild it.
+
+### The chapeau split — the largest single lever
+
+USLM puts the modal in the parent (`MACPAC shall—`) and the duty verb in the
+enumerated child (`(D) ... submit a report to Congress`), so node-level
+extraction hands the judge text with the obligation removed. `iter_provisions`
+prepends ancestor num/heading/chapeau. Effect on gold:
+
+| model | no context | with context |
+|---|---|---|
+| nemotron | 82.5% recall | **95.6%** |
+| gemma-26B | 66.7% recall | **93.9%** |
+
+Precision held or improved in both cases, so the worry that inherited headings
+("Reports to Congress") would cause over-flagging did not materialise. An
+earlier n=78 test showed no effect and was simply underpowered — do not read a
+null result off a sample this task can't support.
+
+### Endpoints
+
+| model | port | server | reasoning knob |
+|---|---|---|---|
+| nemotron-30B-A3B | 8082 | llama.cpp | `chat_template_kwargs.enable_thinking` |
+| gemma-4-26B-A4B | 8080 | llama.cpp | same |
+| gemma-4-E2B | 8081 | llama.cpp | same |
+| gpt-oss-20b | 30000 | SGLang | `reasoning_effort` (needs thinking **on**) |
+
+**Do not send chat to the `:4000` proxy.** It silently drops
+`chat_template_kwargs`, so every request reasons: 146 completion tokens /
+2636 ms via the proxy versus 2 / 19 ms direct, and 0.19/s versus 1.26/s on the
+real judge. Embeddings on `:4000` are fine (~121/s).
+
+`n_ctx` is 2048 on both gemmas (16384 on nemotron), and llama.cpp charges
+`max_tokens` against it — so a long provision plus a large `max_tokens`
+silently truncates the input. `Endpoint.body()` budgets this. With thinking on,
+`max_tokens` must be ≥600 or reasoning consumes the whole allowance and
+`content` returns empty with a normal `finish_reason`.
+
+### Things that were tried and rejected
+
+- **Embedding similarity as the gate.** `granite-embedding` cosine to known
+  mandates reaches only AUC 0.71–0.76 on hard negatives, discarding almost
+  nothing at usable recall. Legal prose is stylistically uniform; embeddings
+  capture topic, not deontic structure. The regex gate is better *and*
+  deterministic.
+- **More concurrency.** The host saturates: 8, 16 and 32 workers all measured
+  ~0.19 items/sec. Throughput came from switching reasoning off, not parallelism.
+- **Easy negatives in benchmarks.** Excluding anything mentioning Congress gave
+  every model 0/16 false positives — a number that measures nothing. Hard
+  negatives (name Congress, no reporting duty) are the only useful control.
+
+### Note-citation selection
+
+A busy section carries many statutory notes, so returning all of them buries
+the one cited. `select_notes()` matches the authority's Pub. L. against each
+note's credit line (`Pub. L. 115–232, ... 132 Stat. 2257, provided that:`),
+falling back to the Statutes at Large cite. **486 of 497 note citations now
+resolve to a specific note**; the remaining 11 are reported as
+`resolved_at: "note_unmatched"` rather than silently looking exact.
+
+This mattered: `49 U.S.C. 47101 note` previously returned "Runway Length in
+Alaska" instead of the "Runway Safety" mandate it means, and `19 U.S.C. 2703
+note` returned a *termination* notice rather than the live rum-remedial-measures
+report — which briefly looked like evidence the Clerk lists a repealed mandate.
+It was not; it was this bug.
+
+### External validation against the gap filings
+
+The strongest available check does not rely on the classifier agreeing with
+itself. Take the `housedoc_gaps.jsonl` rows whose filing states a citation that
+appears nowhere in the Clerk's list, resolve that citation to statutory text,
+and ask the judge independently:
+
+| | |
+|---|---|
+| gap rows with a cite absent from the Clerk's list | 68 |
+| unique USC sections cited | 56 |
+| resolved to statutory text | 48 |
+| **independently confirm a congressional reporting duty** | **43 (90%)** |
+
+Three independent sources agree: an agency filed the report, the statute says
+one is owed, and the Clerk's list does not have it.
+
+Note the measurement trap. `iter_provisions` applies `max_len` to a node's own
+text, so a long section is not emitted whole — it is represented by its
+subsections. Asking only for the exact section id therefore finds 25 of 56 and
+understates the result; ask the section *or any of its subsections*. An earlier
+pass that silently substituted descendant text for unresolved sections produced
+a misleading 28/48.
