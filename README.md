@@ -120,6 +120,7 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 | `pipeline/plaw_fetch.py` | Public-law text for the uncodified mandates |
 | `pipeline/mandate_classify.py` | Finds reporting mandates the Clerk's list misses — see [RUNBOOK §12](docs/RUNBOOK.md) |
 | `data/gold/mandate_gold.json` | 467-row adjudicated gold set for judging the judges |
+| `experiments/dspy_judge.py` | Does an optimizer beat the handwritten judge prompt? — see [RUNBOOK §12](docs/RUNBOOK.md) |
 | `docs/approach.md` | Technical design document (extractor) |
 | `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
 | `deck/` | `slides.md` (Slidev) and the images it references |

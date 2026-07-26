@@ -1,0 +1,308 @@
+{
+  "zeroshot_val": {
+    "n": 115,
+    "tp": 52,
+    "fp": 18,
+    "fn": 0,
+    "tn": 45,
+    "recall": 1.0,
+    "precision": 0.7428571428571429,
+    "f2": 0.935251798561151,
+    "accuracy": 0.8434782608695652,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 49
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 3
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 14
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 16
+      }
+    },
+    "unparsed": 0
+  },
+  "baseline_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 10,
+    "fn": 1,
+    "tn": 53,
+    "recall": 0.9807692307692307,
+    "precision": 0.8360655737704918,
+    "f2": 0.9479553903345725,
+    "accuracy": 0.9043478260869565,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 52
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 6
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 17
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 14
+      }
+    },
+    "unparsed": 0
+  },
+  "baseline_test": {
+    "n": 167,
+    "tp": 75,
+    "fp": 20,
+    "fn": 2,
+    "tn": 70,
+    "recall": 0.974025974025974,
+    "precision": 0.7894736842105263,
+    "f2": 0.9305210918114144,
+    "accuracy": 0.8682634730538922,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 24
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 24
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 20
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 68
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 9
+      }
+    },
+    "unparsed": 0
+  },
+  "zeroshot_test": {
+    "n": 167,
+    "tp": 77,
+    "fp": 32,
+    "fn": 0,
+    "tn": 58,
+    "recall": 1.0,
+    "precision": 0.7064220183486238,
+    "f2": 0.9232613908872902,
+    "accuracy": 0.8083832335329342,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 22
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 23
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 18
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 66
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 6
+      }
+    },
+    "unparsed": 0
+  },
+  "compiled_fp040_test": {
+    "n": 167,
+    "tp": 77,
+    "fp": 19,
+    "fn": 0,
+    "tn": 71,
+    "recall": 1.0,
+    "precision": 0.8020833333333334,
+    "f2": 0.9529702970297029,
+    "accuracy": 0.8862275449101796,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 23
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 26
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 20
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 70
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 9
+      }
+    },
+    "unparsed": 0
+  },
+  "compiled_fp040_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 13,
+    "fn": 1,
+    "tn": 50,
+    "recall": 0.9807692307692307,
+    "precision": 0.796875,
+    "f2": 0.9375,
+    "accuracy": 0.8782608695652174,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 49
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 6
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 16
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 15
+      }
+    },
+    "unparsed": 0
+  },
+  "compiled_fp090_val": {
+    "n": 115,
+    "tp": 52,
+    "fp": 18,
+    "fn": 0,
+    "tn": 45,
+    "recall": 1.0,
+    "precision": 0.7428571428571429,
+    "f2": 0.935251798561151,
+    "accuracy": 0.8434782608695652,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 49
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 3
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 14
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 16
+      }
+    },
+    "unparsed": 0
+  },
+  "compiled_fp090_test": {
+    "n": 167,
+    "tp": 77,
+    "fp": 32,
+    "fn": 0,
+    "tn": 58,
+    "recall": 1.0,
+    "precision": 0.7064220183486238,
+    "f2": 0.9232613908872902,
+    "accuracy": 0.8083832335329342,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 22
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 23
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 18
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 66
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 6
+      }
+    },
+    "unparsed": 0
+  },
+  "fixed_test": {
+    "n": 167,
+    "tp": 77,
+    "fp": 23,
+    "fn": 0,
+    "tn": 67,
+    "recall": 1.0,
+    "precision": 0.77,
+    "f2": 0.9436274509803921,
+    "accuracy": 0.8622754491017964,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 25
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 26
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 19
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 67
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 7
+      }
+    },
+    "unparsed": 0
+  }
+}

@@ -16,6 +16,12 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[project.optional-dependencies]
+dspy = [
+    "dspy>=3.2.1",
+    "optuna>=4.9.0",
+]
+
 # The pipeline is a set of standalone scripts rather than an installed package;
 # both script directories go on the path so intra-directory imports
 # (`from normalize import ...`, `from extract import ...`) resolve under pytest.

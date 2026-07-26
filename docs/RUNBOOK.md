@@ -620,6 +620,61 @@ silently truncates the input. `Endpoint.body()` budgets this. With thinking on,
   every model 0/16 false positives — a number that measures nothing. Hard
   negatives (name Congress, no reporting duty) are the only useful control.
 
+### Optimizing JUDGE_SYSTEM with DSPy
+
+`experiments/dspy_judge.py` asks whether MIPROv2 beats the handwritten
+`JUDGE_SYSTEM`, holding everything else fixed: same nemotron endpoint, same
+thinking-off setting, same gold rows truncated identically. Claude proposes
+instruction candidates; nemotron only ever executes them. The optimizer is
+*seeded* with the handwritten instruction, so the question is "can this be
+improved", not "can the domain knowledge be rediscovered".
+
+Gold is split once, stratified on (stratum, label), seed 0 — 185 train / 115
+val / 167 test. Only the 167-row test slice is quoted below.
+
+| arm | recall | precision | FN | FP |
+|---|---|---|---|---|
+| handwritten `JUDGE_SYSTEM` | 97.4% | 78.9% | 2 | 20 |
+| DSPy zero-shot (same instruction) | 100.0% | 70.6% | 0 | 32 |
+| MIPROv2 compiled | 100.0% | 80.2% | 0 | 19 |
+| MIPROv2 compiled, hand-corrected | 100.0% | 77.0% | 0 | 23 |
+
+**The objective decides the answer, so it is a flag.** `--fp-credit` sets the
+partial credit a false positive earns; a false negative always scores zero. The
+arms cross over at ~0.83. A first run at 0.4 rejected the recall-first operating
+point for making exactly the trade this pipeline wants — a false positive costs
+one confirm-pass call, a false negative sits unevaluated in a 583k-provision
+corpus.
+
+**But encoding that preference faithfully destroys the search signal.** At
+`--fp-credit 0.9` MIPROv2 ran 13 trials and returned the seed program
+unchanged, byte-identical instruction and zero demos: once false positives are
+nearly free, every candidate reaching zero false negatives scores 98–99 and
+there is no gradient left. The prompt worth keeping came from the
+*precision-leaning* objective. Treat the dial as a search parameter that needs
+tension in it, then rank survivors by the preference you actually hold.
+
+**An optimizer will silently write a prompt that contradicts the schema.** The
+winning instruction told the model to emit `recipient` values outside the enum
+(`congressional_committee`, `not_congress`), dropped `semiannual` and `other`
+from the cadence list, and replaced the empty-string convention with a
+"not specified" sentinel. DSPy's adapter clamped all of it, which is why it
+survived 13 trials of scoring — the metric only reads `is_mandate` and
+`recipient == "congress"`. `judge_one` parses raw JSON with no schema and would
+not have clamped anything. The corrections live in
+`experiments/optimized_judge_prompt.txt`, checked in as readable text so the
+diff is reviewable; they cost ~3 points of precision (4 rows, plausibly noise).
+
+**Not yet adopted into the pipeline.** The margin over the handwritten prompt is
+2 false negatives and 3 false positives out of 167 — real on a recall-first
+reading, but small, and switching would invalidate the current sweep outputs and
+every recall figure recorded above. `data/gold/mandate_gold.json` is the only
+clean measurement available and it is 467 rows.
+
+Wall-clock notes: a `light` compile is ~30 min against this host, and MIPROv2
+needs the `optuna` extra (`uv sync --extra dspy`) or it raises only after
+bootstrapping and instruction proposal have already been paid for.
+
 ### Note-citation selection
 
 A busy section carries many statutory notes, so returning all of them buries
