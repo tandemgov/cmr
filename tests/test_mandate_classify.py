@@ -112,6 +112,13 @@ class TestRecipientGate:
         "notify the Speaker of the House and the President pro tempore",
         "the Comptroller General shall review",
         "submit to the appropriate congressional committees",
+        # Plural is the dominant form in appropriations law and was silently
+        # rejected by a singular-only `committee on`.
+        "submit to the Committees on Appropriations of the House and Senate",
+        "transmit to the Committees on Armed Services",
+        "report to the Joint Committee on Taxation",
+        "furnish to the Congressional Budget Office",
+        "file with the Clerk of the House and the Secretary of the Senate",
     ])
     def test_passes_when_a_congressional_recipient_is_named(self, text):
         assert mc.passes_gate(text)
@@ -353,6 +360,77 @@ class TestSweepResume:
         assert "/us/usc/t42/s1396/b/1/D" in ids       # names Congress
         assert "/us/usc/t42/s1397" not in ids         # definitions only
         assert all("MACPAC shall" in r["text"] or "Congress" in r["text"] for r in rows)
+
+
+NOTED = """<?xml version="1.0" encoding="UTF-8"?>
+<uscDoc xmlns="http://xml.house.gov/schemas/uslm/1.0">
+ <main>
+  <section identifier="/us/usc/t10/s2687">
+   <num>§2687.</num><heading>Base closures and realignments</heading>
+   <content>Notwithstanding any other provision of law, no action may be taken to close a military installation.</content>
+   <notes>
+    <note topic="amendments">Amendments 1996—Subsec. (b) amended by Pub. L. 104-106.</note>
+    <note topic="miscellaneous">Base Realignment Reporting Pub. L. 115-232, provided that: the Secretary shall submit to the Committees on Armed Services an annual report on realignment actions.</note>
+    <note topic="miscellaneous">A short note.</note>
+   </notes>
+  </section>
+ </main>
+</uscDoc>
+"""
+
+
+class TestStatutoryNotesAsCandidates:
+    """Notes are not addressable USLM nodes — excluding them is a recall hole."""
+
+    @pytest.fixture
+    def root(self):
+        import xml.etree.ElementTree as ET
+        return ET.fromstring(NOTED)
+
+    def test_iter_provisions_never_yields_notes(self, root):
+        """The gap this closes: note text is invisible to the provision stream."""
+        texts = " ".join(t for _, t in mc.iter_provisions(root, min_len=20))
+        assert "shall submit to the Committees on Armed Services" not in texts
+
+    def test_iter_notes_yields_operative_notes(self, root):
+        got = dict(mc.iter_notes(root, min_len=20))
+        assert any("shall submit to the Committees on Armed Services" in t for t in got.values())
+
+    def test_iter_notes_excludes_drafting_apparatus(self, root):
+        got = " ".join(mc.iter_notes(root, min_len=20) and
+                       [t for _, t in mc.iter_notes(root, min_len=20)])
+        assert "Pub. L. 104-106" not in got
+
+    def test_note_identifiers_are_synthetic_and_scoped_to_the_section(self, root):
+        ids = [i for i, _ in mc.iter_notes(root, min_len=20)]
+        assert all(i.startswith("/us/usc/t10/s2687/note/") for i in ids)
+        assert len(set(ids)) == len(ids), "identifiers must be unique"
+
+    def test_notes_carry_the_section_heading_for_context(self, root):
+        got = dict(mc.iter_notes(root, min_len=20))
+        assert all("Base closures and realignments" in t for t in got.values())
+
+    def test_length_bounds_drop_trivial_notes(self, root):
+        got = dict(mc.iter_notes(root, min_len=120))
+        assert not any(t.endswith("A short note.") for t in got.values())
+
+    def test_build_candidates_includes_notes_and_marks_the_source(self, tmp_path, monkeypatch):
+        (tmp_path / "usc10.xml").write_text(NOTED)
+        monkeypatch.setattr(mc, "USC_XML_DIR", tmp_path)
+        out = tmp_path / "c.jsonl"
+        mc.build_candidates(out)
+        rows = [json.loads(l) for l in out.read_text().splitlines()]
+        sources = {r["source"] for r in rows}
+        assert "note" in sources
+        assert any("Committees on Armed Services" in r["text"] for r in rows)
+
+    def test_notes_can_be_excluded_explicitly(self, tmp_path, monkeypatch):
+        (tmp_path / "usc10.xml").write_text(NOTED)
+        monkeypatch.setattr(mc, "USC_XML_DIR", tmp_path)
+        out = tmp_path / "c.jsonl"
+        mc.build_candidates(out, notes=False)
+        rows = [json.loads(l) for l in out.read_text().splitlines()]
+        assert all(r["source"] == "provision" for r in rows)
 
 
 class TestConfirmScope:

@@ -545,15 +545,26 @@ uv run python pipeline/mandate_classify.py --pilot --negatives 8000 --judge-n 30
 
 ### Measured performance
 
-| stage | mechanism | recall | volume |
+| stage | mechanism | measured on | volume |
 |---|---|---|---|
-| 1. recipient gate | regex, `passes_gate()` | **99.1%** | 546,625 → **37,141** (6.8%) |
-| 2. sweep | nemotron, thinking off | **95.6%** (prec 82.6%) | — |
-| 3. confirm | gemma-26B | 93.9% (prec **94.7%**) | — |
+| 1. recipient gate | regex, `passes_gate()` | **~72% recall** (frontier-audited) | 583,422 → **64,233** |
+| 2. sweep | nemotron, thinking off | 95.6% recall / 82.6% prec **on gold** | — |
+| 3. confirm | gemma-26B | 93.9% / 94.7% **on gold** | — |
+| 4. currency | `currency.py` | — | drops 4.5% |
+| **end-to-end** | | **90.5% precision, ~72% recall** | |
 
-End-to-end recall ≈ 94.7%; the sweep is 8–10 h of local compute. Recall is
-weighted over precision throughout, because a false positive is rejected
-downstream while a false negative is invisible in a 546k-provision corpus.
+Precision is frontier-audited on a 400-row stratified sample (§ Precision
+below). Recall is frontier-audited on 1,000 gate-rejected rows (§ Recall).
+Recall is weighted over precision throughout, because a false positive is
+rejected downstream while a false negative is invisible in a 583k-provision
+corpus — which is exactly why recall needed measuring rather than asserting.
+
+> **Correction.** Earlier revisions of this section claimed 99.1% gate recall
+> and ~94.7% end-to-end. Both were wrong. The 99.1% was computed as 113/114 —
+> a raw count across two strata whose populations differ by **14×** (37k
+> gate-pass vs ~509k gate-fail). Size-weighted, the same gold data gives ~75%,
+> and a proper stratified study gives ~72%. **Never compute a rate across
+> strata without weighting by stratum size.**
 
 Ground truth is `data/gold/mandate_gold.json` — 467 rows (212 positive), Claude-
 adjudicated, stratified over known Clerk mandates plus gate-passing and
@@ -647,3 +658,59 @@ subsections. Asking only for the exact section id therefore finds 25 of 56 and
 understates the result; ask the section *or any of its subsections*. An earlier
 pass that silently substituted descendant text for unresolved sections produced
 a misleading 28/48.
+
+### Precision — frontier-audited
+
+400 rows sampled from the live set, stratified by frequency, adjudicated by
+`claude-opus-5` at medium effort ($3.62, 400/400 parsed). Each part of the
+claim was judged independently:
+
+| Opus 5 confirms | | |
+|---|---|---|
+| is a congressional reporting duty | 389/400 | 97.2% ±1.6 |
+| …and is recurring | 374/400 | 93.5% ±2.4 |
+| …and is still in force | 362/400 | **90.5% ±2.9** |
+
+Errors concentrate in the cheap metadata filters, not the hard judgment:
+15 one-time duties mislabelled recurring, 12 lapsed, 11 not congressional.
+The `frequency` prompt in `JUDGE_SYSTEM` was tightened in response — a
+deadline is not a cadence, and recurrence needs explicit language.
+
+Verdicts with reasoning: `data/gold/adjudication.jsonl`.
+
+### Recall — frontier-audited
+
+Recall cannot be measured by sampling rejects uniformly: with ~0.4% of the
+519k rejects being misses, a 400-row uniform sample finds one or two. Sample
+**enriched strata** instead and weight back by stratum size.
+
+| stratum | size | sampled | recurring congressional report | est. missed |
+|---|---|---|---|---|
+| duty verb + delivery verb, no recipient token | 37,576 | 400 | 22 (5.5%) | **~2,066** |
+| unusual recipient (`both Houses`, `majority leader`, …) | 834 | 400 | 6 | ~12 |
+| residual | 480,779 | 200 | **0** | ~0 |
+
+**~2,079 missed; recall ≈ 72%** against 5,282 found. Cost: $5.98.
+
+The residual `0/200` is the load-bearing result — it shows the misses
+concentrate in one identifiable stratum rather than being smeared across half
+a million provisions, which is what makes the estimate trustworthy *and*
+points at the fix: run the whole `duty_no_recipient` stratum through the
+judge rather than trying to patch the recipient regex.
+
+### Two structural recall holes found by tests
+
+**Statutory notes were never candidates.** `iter_provisions` yields only
+addressable USLM nodes and `_text_of` strips `<notes>`, so the sweep was blind
+to 40,762 notes — 9,833 of which name a congressional recipient. This is not a
+tuning gap: 497 of the Clerk's own 3,297 mandates resolve to notes.
+`iter_notes()` closes it, synthesising `<section_id>/note/<n>` identifiers
+(stable per release point, but **not** USLM addresses — don't feed them back
+to a USLM lookup).
+
+**The gate rejected plural committee names.** `committee on` did not match
+"the Committees on Appropriations" — the dominant form in appropriations law.
+Now `committees?\s+(?:on|of)`, plus `joint committee`, `congressional budget
+office`, `clerk of the house`, and `secretary of the senate`. Caught by a unit
+test, not by inspection; practical impact was smaller than feared (113
+provisions) because chapeau context usually supplied another matching token.

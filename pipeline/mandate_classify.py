@@ -206,8 +206,17 @@ Answer NO if:
 - the text merely defines terms, authorizes appropriations, grants rulemaking authority, or establishes a body without requiring it to report to Congress
 - it only cross-references a reporting duty created elsewhere
 
+FREQUENCY is the single most error-prone field — a frontier audit found most residual errors were one-time duties labelled as recurring. Decide it from the text, not from the topic:
+
+- "one-time" — the duty is discharged once. A single deadline pegged to an event with no repetition: "not later than 180 days after the date of enactment", "within 1 year after the date of the report". If nothing says it repeats, it is one-time.
+- A recurring cadence ("annual", "biennial", "quarterly", "semiannual", "monthly") requires explicit language of repetition: "annually", "each year", "every 2 years", "for each fiscal year", "and annually thereafter", "on a quarterly basis". The words "thereafter", "each", and "every" are the signal.
+- "event-driven" — the duty recurs but only when a triggering condition arises: "upon each determination", "whenever the Secretary finds", "in the case of any such waiver". Recurrence is conditional, not calendared.
+- "unknown" — the text states a duty but no discernible timing.
+
+A deadline is not a cadence. "Not later than March 31, 2019, and annually thereafter" is annual; "Not later than March 31, 2019" alone is one-time.
+
 Reply with STRICT JSON and nothing else:
-{"is_mandate": true|false, "recipient": "congress"|"agency"|"public"|"other"|"none", "reporting_entity": "<who must report, or empty>", "deadline": "<deadline or trigger, or empty>", "frequency": "<one-time|annual|biennial|quarterly|event-driven|other|unknown>", "confidence": "high"|"medium"|"low"}"""
+{"is_mandate": true|false, "recipient": "congress"|"agency"|"public"|"other"|"none", "reporting_entity": "<who must report, or empty>", "deadline": "<deadline or trigger, or empty>", "frequency": "<one-time|annual|biennial|quarterly|semiannual|monthly|event-driven|other|unknown>", "confidence": "high"|"medium"|"low"}"""
 
 
 def _extract_json(s: str) -> dict | None:
@@ -314,11 +323,17 @@ _MODAL_RE = re.compile(r"(?i)\b(shall|must|is directed to|are directed to|is req
 # Adding "duty AND delivery" terms drops recall to ~82-85% for no useful gain.
 # Embedding similarity was tried as an alternative and is far worse — AUC 0.71
 # on hard negatives, discarding almost nothing at usable recall.
+#
+# `committees? on` must be plural-tolerant: statutes overwhelmingly write "the
+# Committees on Appropriations", and a singular-only `committee on` silently
+# rejected every one of them.
 _RECIPIENT_RE = re.compile(
     r"(?i)\b("
     r"congress|congressional|senate|house of representatives|"
-    r"committee on|committees? of|speaker of the house|"
-    r"president pro tempore|comptroller general"
+    r"committees?\s+(?:on|of)|speaker of the house|"
+    r"president pro tempore|comptroller general|"
+    r"joint committee|congressional budget office|"
+    r"clerk of the house|secretary of the senate"
     r")\b"
 )
 
@@ -379,6 +394,40 @@ def iter_provisions(root: ET.Element, min_len: int = 120, max_len: int = 4000,
 
     for sec in root.iter(f"{_NS}section"):
         yield from walk(sec, "")
+
+
+def iter_notes(root: ET.Element, min_len: int = 120, max_len: int = 8000):
+    """Yield ``(identifier, text)`` for each operative statutory note.
+
+    Notes are not addressable USLM nodes, so ``iter_provisions`` never emits
+    them — yet uncodified reporting duties routinely live there: 497 of the
+    House Document's own 3,297 mandates resolve to a statutory note, and 9,255
+    notes corpus-wide name a congressional recipient. Sweeping codified text
+    alone is structurally blind to all of them.
+
+    Identifiers are synthesised as ``<section_id>/note/<n>`` because USLM gives
+    notes none. They are stable for a fixed release point but are *not* USLM
+    addresses — do not feed them back to a USLM lookup.
+
+    Drafting apparatus (amendment history, effective dates) is already excluded
+    by ``statute_fetch._statutory_notes``.
+    """
+    from statute_fetch import _statutory_notes  # noqa: PLC0415 — avoids an import cycle
+
+    for section in root.iter(f"{_NS}section"):
+        sec_id = section.get("identifier")
+        if not sec_id:
+            continue
+        heading = section.find(f"{_NS}heading")
+        prefix = _text_of(heading) if heading is not None else ""
+        for i, note in enumerate(_statutory_notes(section)):
+            body = note["text"]
+            if not (min_len < len(body) < max_len):
+                continue
+            # Prefix the section heading for the same reason iter_provisions
+            # carries the chapeau: a note often names no actor of its own.
+            text = f"{prefix} {body}".strip() if prefix else body
+            yield f"{sec_id}/note/{i}", text
 
 
 def load_known_mandates() -> list[dict]:
@@ -492,14 +541,21 @@ CANDIDATES_PATH = OUT_DIR / "sweep_candidates.jsonl"
 VERDICTS_PATH = OUT_DIR / "sweep_verdicts.jsonl"
 
 
-def build_candidates(out: Path = CANDIDATES_PATH) -> int:
+def build_candidates(out: Path = CANDIDATES_PATH, notes: bool = True) -> int:
     """Write every gate-passing provision in the corpus to a candidate file.
 
     Split from the judging pass so a resumed sweep does not re-parse 665 MB of
     XML (~5 minutes) just to work out what it already did.
+
+    ``notes`` includes statutory notes as candidates (see ``iter_notes``).
+    Leaving them out is a structural recall hole, not a tuning choice — it
+    silently excludes the population where uncodified mandates live. Each row
+    carries a ``source`` of ``"provision"`` or ``"note"`` so downstream stages
+    can report on them separately.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
-    n = seen = 0
+    counts: dict[str, int] = {"provision": 0, "note": 0}
+    seen = 0
     with open(out, "w") as fh:
         for f in sorted(USC_XML_DIR.glob("usc*.xml")):
             try:
@@ -507,16 +563,22 @@ def build_candidates(out: Path = CANDIDATES_PATH) -> int:
             except ET.ParseError:
                 logger.warning("unparseable: %s", f.name)
                 continue
-            for ident, text in iter_provisions(root):
-                seen += 1
-                if not passes_gate(text):
-                    continue
-                fh.write(json.dumps({"uslm_id": ident, "text": text}) + "\n")
-                n += 1
-            logger.info("%-14s candidates %6d / %7d scanned", f.name, n, seen)
-    logger.info("Wrote %d candidates (%.1f%% of %d provisions) → %s",
-                n, n / seen * 100 if seen else 0, seen, out)
-    return n
+            streams = [("provision", iter_provisions(root))]
+            if notes:
+                streams.append(("note", iter_notes(root)))
+            for source, stream in streams:
+                for ident, text in stream:
+                    seen += 1
+                    if not passes_gate(text):
+                        continue
+                    fh.write(json.dumps({"uslm_id": ident, "text": text, "source": source}) + "\n")
+                    counts[source] += 1
+            logger.info("%-14s provisions %6d  notes %5d  / %7d scanned",
+                        f.name, counts["provision"], counts["note"], seen)
+    total = sum(counts.values())
+    logger.info("Wrote %d candidates (%d provisions + %d notes) from %d scanned → %s",
+                total, counts["provision"], counts["note"], seen, out)
+    return total
 
 
 def _done_ids(path: Path) -> set[str]:
