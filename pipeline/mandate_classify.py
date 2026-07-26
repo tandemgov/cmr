@@ -581,19 +581,38 @@ def build_candidates(out: Path = CANDIDATES_PATH, notes: bool = True) -> int:
     return total
 
 
-def _done_ids(path: Path) -> set[str]:
-    """Identifiers already judged, so a resumed run skips them."""
+def load_verdicts(path: Path) -> dict[str, dict]:
+    """Read a verdict log, keeping the LAST record per identifier.
+
+    The logs are append-only and a retried row is appended again rather than
+    rewritten, so a naive read double-counts anything re-judged. Last-wins is
+    the right rule because a retry is always the better record — it replaced a
+    null.
+    """
+    out: dict[str, dict] = {}
     if not path.exists():
-        return set()
-    done = set()
+        return out
     for line in path.read_text().splitlines():
         if not line.strip():
             continue
         try:
-            done.add(json.loads(line)["uslm_id"])
+            row = json.loads(line)
+            out[row["uslm_id"]] = row
         except (json.JSONDecodeError, KeyError):
             continue  # a torn final line from a killed run
-    return done
+    return out
+
+
+def _done_ids(path: Path) -> set[str]:
+    """Identifiers already judged *successfully*, so a resumed run skips them.
+
+    A null verdict is NOT done. The judge swallows transport errors and returns
+    None, so a network outage mid-sweep writes nulls that look identical to a
+    genuinely unparseable response — and treating those as complete means a
+    blip silently drops rows from the corpus with no error and no retry. Both
+    cases are cheap to re-judge; neither is safe to keep.
+    """
+    return {k for k, v in load_verdicts(path).items() if v.get("verdict") is not None}
 
 
 def sweep(candidates: Path = CANDIDATES_PATH, out: Path = VERDICTS_PATH,
@@ -684,7 +703,7 @@ def confirm(verdicts: Path = VERDICTS_PATH, out: Path | None = None,
     ~6.1k (~1.4h) and is the part worth defending.
     """
     out = out or verdicts.with_name("sweep_confirmed.jsonl")
-    rows = [json.loads(l) for l in verdicts.read_text().splitlines() if l.strip()]
+    rows = list(load_verdicts(verdicts).values())
     flagged = [r for r in rows if r.get("is_mandate")]
     if restrict is not None:
         flagged = [r for r in flagged if r["uslm_id"] in restrict]

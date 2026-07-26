@@ -117,8 +117,13 @@ def annotate(year: int, confirmed: Path = CONFIRMED_PATH,
                 n = json.loads(line)
                 freq[n["uslm_id"]] = n.get("frequency", "")
 
-    kept = [json.loads(l) for l in confirmed.read_text().splitlines() if l.strip()]
-    kept = [r for r in kept if r.get("is_mandate")]
+    # Append-only log: a retried row appears twice, so keep the last per id.
+    seen: dict[str, dict] = {}
+    for line in confirmed.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            seen[row["uslm_id"]] = row
+    kept = [r for r in seen.values() if r.get("is_mandate")]
 
     tally: Counter[str] = Counter()
     out.parent.mkdir(parents=True, exist_ok=True)

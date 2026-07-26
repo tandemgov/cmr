@@ -103,7 +103,12 @@ class TestChapeauContext:
 
 
 class TestRecipientGate:
-    """Recall-first by design: 99.1% recall, keeping 6.8% of the corpus."""
+    """Recall-first by design: ~72% recall (frontier-audited), keeping ~11% of the corpus.
+
+    An earlier 99.1% figure was a raw count across two strata whose populations
+    differ by 14x — see RUNBOOK §12. The misses concentrate in provisions that
+    state a duty whose recipient the regex does not recognise.
+    """
 
     @pytest.mark.parametrize("text", [
         "the Secretary shall submit to Congress a report",
@@ -270,17 +275,48 @@ class TestSweepResume:
 
     def test_done_ids_reads_prior_verdicts(self, tmp_path):
         p = tmp_path / "v.jsonl"
-        p.write_text('{"uslm_id": "/a", "is_mandate": true}\n{"uslm_id": "/b", "is_mandate": false}\n')
+        p.write_text('{"uslm_id": "/a", "verdict": {}, "is_mandate": true}\n'
+                     '{"uslm_id": "/b", "verdict": {}, "is_mandate": false}\n')
         assert mc._done_ids(p) == {"/a", "/b"}
 
     def test_done_ids_survives_a_torn_final_line(self, tmp_path):
         """A killed run can leave a half-written record."""
         p = tmp_path / "v.jsonl"
-        p.write_text('{"uslm_id": "/a"}\n{"uslm_id": "/b"}\n{"uslm_i')
+        p.write_text('{"uslm_id": "/a", "verdict": {}}\n'
+                     '{"uslm_id": "/b", "verdict": {}}\n{"uslm_i')
         assert mc._done_ids(p) == {"/a", "/b"}
 
     def test_done_ids_on_missing_file_is_empty(self, tmp_path):
         assert mc._done_ids(tmp_path / "nope.jsonl") == set()
+
+    def test_null_verdicts_are_not_done_and_get_retried(self, tmp_path):
+        """A network drop writes nulls; treating them as done silently loses rows."""
+        p = tmp_path / "v.jsonl"
+        p.write_text('{"uslm_id": "/ok", "verdict": {"is_mandate": true}}\n'
+                     '{"uslm_id": "/dropped", "verdict": null}\n')
+        assert mc._done_ids(p) == {"/ok"}
+
+    def test_retry_appends_and_last_record_wins(self, tmp_path, monkeypatch):
+        cands = tmp_path / "c.jsonl"
+        cands.write_text("".join(json.dumps({"uslm_id": u, "text": "t"}) + "\n"
+                                 for u in ("/ok", "/dropped")))
+        out = tmp_path / "v.jsonl"
+        out.write_text('{"uslm_id": "/ok", "verdict": {"is_mandate": true}, "is_mandate": true}\n'
+                       '{"uslm_id": "/dropped", "verdict": null, "is_mandate": false}\n')
+        monkeypatch.setattr(mc, "judge_many",
+                            lambda t, workers=8, endpoint=None: [{"is_mandate": True, "recipient": "congress"}] * len(t))
+        assert mc.sweep(candidates=cands, out=out) == 1, "only the null row is retried"
+        final = mc.load_verdicts(out)
+        assert len(final) == 2, "deduped by identifier"
+        assert final["/dropped"]["verdict"] is not None, "retry supersedes the null"
+        assert final["/dropped"]["is_mandate"] is True
+
+    def test_load_verdicts_keeps_the_last_record(self, tmp_path):
+        p = tmp_path / "v.jsonl"
+        p.write_text('{"uslm_id": "/a", "verdict": null}\n'
+                     '{"uslm_id": "/a", "verdict": {"is_mandate": true}}\n')
+        got = mc.load_verdicts(p)
+        assert len(got) == 1 and got["/a"]["verdict"] == {"is_mandate": True}
 
     def test_sweep_skips_already_judged_and_appends(self, tmp_path, monkeypatch):
         cands = tmp_path / "c.jsonl"
@@ -288,7 +324,8 @@ class TestSweepResume:
             json.dumps({"uslm_id": f"/s{i}", "text": f"shall submit to Congress report {i}"}) + "\n"
             for i in range(5)))
         out = tmp_path / "v.jsonl"
-        out.write_text('{"uslm_id": "/s0", "is_mandate": true}\n{"uslm_id": "/s1", "is_mandate": true}\n')
+        out.write_text('{"uslm_id": "/s0", "verdict": {}, "is_mandate": true}\n'
+                       '{"uslm_id": "/s1", "verdict": {}, "is_mandate": true}\n')
 
         judged = []
         def fake(texts, workers=8, endpoint=None):

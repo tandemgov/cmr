@@ -127,6 +127,20 @@ def clerk_keys(path: Path = EXTRACT_PATH) -> dict[str, set]:
     return {"usc": usc, "plaw": plaw, "stat": stat}
 
 
+def _last_per_id(path: Path) -> dict[str, dict]:
+    """Read an append-only verdict log, keeping the last record per identifier."""
+    out: dict[str, dict] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            out[row["uslm_id"]] = row
+        except (json.JSONDecodeError, KeyError):
+            continue
+    return out
+
+
 def section_of(uslm_id: str) -> str | None:
     """The enclosing section id for any addressable node."""
     m = re.match(r"(/us/usc/t[0-9A-Za-z]+/s[0-9A-Za-z\-–]+)", uslm_id or "")
@@ -156,7 +170,8 @@ def annotate(verdicts: Path = VERDICTS_PATH, out: Path = OUT_PATH) -> dict[str, 
     logger.info("Clerk keys: %d USC sections, %d (plaw, sec), %d Stat",
                 len(keys["usc"]), len(keys["plaw"]), len(keys["stat"]))
 
-    rows = [json.loads(l) for l in verdicts.read_text().splitlines() if l.strip()]
+    # Verdict logs are append-only; a retried row appears twice. Keep the last.
+    rows = list(_last_per_id(verdicts).values())
     flagged = [r for r in rows if r.get("is_mandate")]
     tally: Counter[str] = Counter()
     out.parent.mkdir(parents=True, exist_ok=True)
