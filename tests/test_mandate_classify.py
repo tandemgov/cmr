@@ -12,6 +12,19 @@ import pytest
 
 import mandate_classify as mc
 
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch, request):
+    """Unit tests must never touch the model host.
+
+    sweep()/confirm() preflight a live endpoint, so without this every test
+    that drives them opens a real socket — slow, flaky, and dependent on which
+    servers happen to be up. Tests that exercise the guard itself opt out.
+    """
+    if request.node.get_closest_marker("uses_endpoint_probe"):
+        return
+    monkeypatch.setattr(mc, "check_endpoint", lambda endpoint: None)
+
 # `MACPAC shall—` sits in the parent; `(D) ... submit a report to Congress` in
 # the child. Extracting the child alone loses both the actor and the modal.
 USLM = """<?xml version="1.0" encoding="UTF-8"?>
@@ -468,6 +481,45 @@ class TestStatutoryNotesAsCandidates:
         mc.build_candidates(out, notes=False)
         rows = [json.loads(l) for l in out.read_text().splitlines()]
         assert all(r["source"] == "provision" for r in rows)
+
+
+@pytest.mark.uses_endpoint_probe
+class TestDeadEndpointGuard:
+    """A dead server produces a plausible-looking result made entirely of failures."""
+
+    def test_check_endpoint_raises_when_the_server_returns_nothing(self, monkeypatch):
+        monkeypatch.setattr(mc, "judge_one", lambda text, ep: None)
+        with pytest.raises(SystemExit, match="did not return a usable verdict"):
+            mc.check_endpoint("gemma-26b")
+
+    def test_check_endpoint_passes_on_a_healthy_server(self, monkeypatch):
+        monkeypatch.setattr(mc, "judge_one",
+                            lambda text, ep: {"is_mandate": True, "recipient": "congress"})
+        mc.check_endpoint("gemma-26b")  # must not raise
+
+    def test_confirm_preflights_before_writing_anything(self, tmp_path, monkeypatch):
+        v = tmp_path / "v.jsonl"
+        v.write_text(json.dumps({"uslm_id": "/a", "verdict": {}, "is_mandate": True}) + "\n")
+        monkeypatch.setattr(mc, "judge_one", lambda text, ep: None)
+        out = tmp_path / "o.jsonl"
+        with pytest.raises(SystemExit):
+            mc.confirm(verdicts=v, out=out, restrict=None)
+        assert not out.exists(), "must not write a partial log against a dead endpoint"
+
+    def test_confirm_records_a_failed_call_as_null_not_negative(self, tmp_path, monkeypatch):
+        """is_mandate=False for a failed call silently drops the row forever."""
+        v = tmp_path / "v.jsonl"
+        v.write_text(json.dumps({"uslm_id": "/a", "verdict": {}, "is_mandate": True}) + "\n")
+        monkeypatch.setattr(mc, "CANDIDATES_PATH", tmp_path / "c.jsonl")
+        (tmp_path / "c.jsonl").write_text(json.dumps({"uslm_id": "/a", "text": "t"}) + "\n")
+        monkeypatch.setattr(mc, "check_endpoint", lambda ep: None)
+        monkeypatch.setattr(mc, "judge_many", lambda t, workers=8, endpoint=None: [None])
+        out = tmp_path / "o.jsonl"
+        mc.confirm(verdicts=v, out=out, restrict=None)
+        row = json.loads(out.read_text().splitlines()[0])
+        assert row["verdict"] is None
+        assert row["is_mandate"] is None, "null verdict must not become a negative"
+        assert mc._done_ids(out) == set(), "and must stay retryable"
 
 
 class TestConfirmScope:

@@ -281,7 +281,24 @@ def save_result(key: str, payload: dict) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     all_results = json.loads(RESULTS_PATH.read_text()) if RESULTS_PATH.exists() else {}
     all_results[key] = payload
-    RESULTS_PATH.write_text(json.dumps(all_results, indent=2))
+    RESULTS_PATH.write_text(json.dumps(all_results, allow_nan=False, indent=2))
+
+
+def save_predictions(arm: str, examples: list[dspy.Example], preds: list[bool]) -> None:
+    """Per-row verdicts, so two arms can be compared where they disagree.
+
+    Aggregate confusion counts cannot distinguish a systematic recall hole from
+    two coin-flips near the decision boundary; the disagreeing rows can.
+    """
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUT_DIR / f"preds_{arm}.jsonl"
+    with path.open("w") as fh:
+        for e, p in zip(examples, preds):
+            fh.write(json.dumps({
+                "uslm_id": e.uslm_id, "stratum": e.stratum,
+                "gold": bool(e.gold_congressional), "pred": bool(p),
+                "provision": e.provision[:1200],
+            }) + "\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +306,7 @@ def save_result(key: str, payload: dict) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def run_baseline(examples: list[dspy.Example], slice_name: str) -> dict:
+def run_baseline(examples: list[dspy.Example], slice_name: str, arm: str = "") -> dict:
     """The production path, untouched: JUDGE_SYSTEM through judge_many."""
     verdicts = mc.judge_many([e.provision for e in examples],
                              workers=NUM_THREADS, endpoint=TASK_MODEL)
@@ -300,10 +317,13 @@ def run_baseline(examples: list[dspy.Example], slice_name: str) -> dict:
     print_score(f"baseline (handwritten JUDGE_SYSTEM) on {slice_name}", s)
     if unparsed:
         print(f"  {unparsed} responses failed to parse (counted as negative)")
+    if arm:
+        save_predictions(arm, examples, preds)
     return s
 
 
-def run_dspy(program: dspy.Module, examples: list[dspy.Example], label: str) -> dict:
+def run_dspy(program: dspy.Module, examples: list[dspy.Example], label: str,
+             arm: str = "") -> dict:
     evaluator = dspy.Evaluate(
         devset=examples, metric=optimizer_metric, num_threads=NUM_THREADS,
         display_progress=True, provide_traceback=False,
@@ -323,6 +343,9 @@ def run_dspy(program: dspy.Module, examples: list[dspy.Example], label: str) -> 
     print_score(label, s)
     if failed:
         print(f"  {failed} predictions errored (counted as negative)")
+    if arm:
+        # dspy.Evaluate may reorder; take the examples back off its results.
+        save_predictions(arm, [o[0] for o in outputs], preds)
     return s
 
 
@@ -383,7 +406,10 @@ def main() -> None:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("command",
-                    choices=["baseline", "zeroshot", "optimize", "test", "fixed", "report"])
+                    choices=["baseline", "zeroshot", "optimize", "test", "fixed",
+                             "variant", "report"])
+    ap.add_argument("--variant", default="xref",
+                    help="name under experiments/variants/ (xref, approp, both)")
     ap.add_argument("--slice", default="test", choices=["train", "val", "test"])
     ap.add_argument("--limit", type=int, default=0, help="cap rows, for smoke tests")
     ap.add_argument("--auto", default="light", choices=["light", "medium", "heavy"])
@@ -406,7 +432,8 @@ def main() -> None:
     dspy.configure(lm=task_lm())
 
     if args.command == "baseline":
-        save_result(f"baseline_{args.slice}", run_baseline(rows, args.slice))
+        save_result(f"baseline_{args.slice}",
+                    run_baseline(rows, args.slice, arm=f"baseline_{args.slice}"))
     elif args.command == "zeroshot":
         save_result(f"zeroshot_{args.slice}", run_dspy(build_program(), rows, f"DSPy zero-shot on {args.slice}"))
     elif args.command == "optimize":
@@ -419,10 +446,21 @@ def main() -> None:
         program.load(str(path))
         save_result(f"compiled_{_tag(FP_CREDIT)}_{args.slice}",
                     run_dspy(program, rows, f"compiled ({_tag(FP_CREDIT)}) on {args.slice}"))
+    elif args.command == "variant":
+        # Production path with one clause of JUDGE_SYSTEM swapped, so the only
+        # difference from the `baseline` arm is that clause -- not the prompt
+        # framework, the adapter, or the output contract.
+        path = REPO_ROOT / "experiments/variants" / f"{args.variant}.txt"
+        if not path.exists():
+            sys.exit(f"no variant at {path}; run experiments/make_variants.py first")
+        mc.JUDGE_SYSTEM = path.read_text()
+        arm = f"variant_{args.variant}_{args.slice}"
+        save_result(arm, run_baseline(rows, f"{args.slice} [variant:{args.variant}]", arm=arm))
     elif args.command == "fixed":
         program = build_program(FIXED_PROMPT_PATH.read_text().strip())
         save_result(f"fixed_{args.slice}",
-                    run_dspy(program, rows, f"hand-corrected compiled prompt on {args.slice}"))
+                    run_dspy(program, rows, f"hand-corrected compiled prompt on {args.slice}",
+                             arm=f"fixed_{args.slice}"))
     elif args.command == "report":
         results = json.loads(RESULTS_PATH.read_text()) if RESULTS_PATH.exists() else {}
         print(f"\n{'arm':32s} {'n':>4s} {'recall':>8s} {'prec':>8s} {'F2':>8s} {'acc':>8s}")

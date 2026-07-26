@@ -251,6 +251,25 @@ def judge_one(text: str, endpoint: str | Endpoint = SWEEP_MODEL) -> dict | None:
     return _extract_json(msg.get("content") or "")
 
 
+def check_endpoint(endpoint: str | Endpoint) -> None:
+    """Fail fast if the endpoint cannot answer a trivial prompt.
+
+    A dead server is indistinguishable from a corpus of unjudgeable text: every
+    request returns None, every None records as a negative verdict, and the run
+    reports a plausible-looking result built entirely from failures. This
+    happened — a confirm pass over 689 rows finished in two seconds against a
+    503, and produced a 10% keep rate that looked like a finding.
+
+    One probe up front is cheaper than discovering it downstream.
+    """
+    ep = ENDPOINTS[endpoint] if isinstance(endpoint, str) else endpoint
+    if judge_one("The Secretary shall submit to Congress an annual report.", ep) is None:
+        raise SystemExit(
+            f"endpoint {ep.name} ({ep.url}) did not return a usable verdict — "
+            f"check the server is up before running a pass against it"
+        )
+
+
 def judge_many(texts: list[str], workers: int = 8,
                endpoint: str | Endpoint = SWEEP_MODEL) -> list[dict | None]:
     """Judge many provisions concurrently.
@@ -632,6 +651,7 @@ def sweep(candidates: Path = CANDIDATES_PATH, out: Path = VERDICTS_PATH,
     """
     if not candidates.exists():
         raise SystemExit(f"{candidates} not found — run with --build-candidates first")
+    check_endpoint(endpoint)
     rows = [json.loads(l) for l in candidates.read_text().splitlines() if l.strip()]
     random.Random(seed).shuffle(rows)
     done = _done_ids(out)
@@ -702,6 +722,7 @@ def confirm(verdicts: Path = VERDICTS_PATH, out: Path | None = None,
     full flagged set is ~29.5k rows (~6.6h), while the novel periodic core is
     ~6.1k (~1.4h) and is the part worth defending.
     """
+    check_endpoint(endpoint)
     out = out or verdicts.with_name("sweep_confirmed.jsonl")
     rows = list(load_verdicts(verdicts).values())
     flagged = [r for r in rows if r.get("is_mandate")]
@@ -724,9 +745,13 @@ def confirm(verdicts: Path = VERDICTS_PATH, out: Path | None = None,
             batch = [r for r in todo[i:i + chunk] if r["uslm_id"] in text_of]
             vs = judge_many([text_of[r["uslm_id"]] for r in batch], workers=workers, endpoint=endpoint)
             for r, v in zip(batch, vs):
+                # A null is a failed call, not a negative verdict. Writing
+                # is_mandate=False for it silently drops the row; leaving the
+                # field null keeps it retryable by _done_ids().
                 fh.write(json.dumps({
                     "uslm_id": r["uslm_id"], "model": endpoint,
-                    "verdict": v, "is_mandate": is_mandate(v),
+                    "verdict": v,
+                    "is_mandate": is_mandate(v) if v is not None else None,
                 }) + "\n")
             fh.flush()
             written += len(batch)

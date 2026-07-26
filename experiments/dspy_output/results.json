@@ -304,5 +304,107 @@
       }
     },
     "unparsed": 0
+  },
+  "fixed_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 16,
+    "fn": 1,
+    "tn": 47,
+    "recall": 0.9807692307692307,
+    "precision": 0.7611940298507462,
+    "f2": 0.9272727272727272,
+    "accuracy": 0.8521739130434782,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 48
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 5
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 16
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 14
+      }
+    },
+    "unparsed": 0
+  },
+  "variant_xref_test": {
+    "n": 167,
+    "tp": 74,
+    "fp": 18,
+    "fn": 3,
+    "tn": 72,
+    "recall": 0.961038961038961,
+    "precision": 0.8043478260869565,
+    "f2": 0.9250000000000002,
+    "accuracy": 0.874251497005988,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 24
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 24
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 20
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 69
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 9
+      }
+    },
+    "unparsed": 0
+  },
+  "variant_xref_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 10,
+    "fn": 1,
+    "tn": 53,
+    "recall": 0.9807692307692307,
+    "precision": 0.8360655737704918,
+    "f2": 0.9479553903345725,
+    "accuracy": 0.9043478260869565,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 52
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 6
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 17
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 14
+      }
+    },
+    "unparsed": 0
   }
 }

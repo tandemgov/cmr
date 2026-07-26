@@ -29,4 +29,5 @@ dspy = [
 pythonpath = ["extraction", "pipeline"]
 markers = [
     "slow: whole-document invariants against the real source PDF (~1 min); skip with -m 'not slow'",
+    "uses_endpoint_probe: exercises the live-endpoint guard itself; opts out of the no-network fixture",
 ]
