@@ -46,6 +46,7 @@ logger = logging.getLogger("match_judge")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 OUT_DIR = REPO_ROOT / "compare_output"
 CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
@@ -206,9 +207,23 @@ def call_gemini(cand: dict) -> dict:
     return parse_json_loose(resp.text)
 
 
+def call_openai(cand: dict) -> dict:
+    from openai import OpenAI
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        max_tokens=500,
+        response_format={"type": "json_object"},
+        messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                  {"role": "user", "content": build_user_text(cand)}],
+    )
+    return parse_json_loose(resp.choices[0].message.content or "")
+
+
 JUDGES = {
     "claude": (call_anthropic, lambda: ANTHROPIC_MODEL, "ANTHROPIC_API_KEY"),
     "gemini": (call_gemini, lambda: GEMINI_MODEL, ("GEMINI_API_KEY", "GOOGLE_API_KEY")),
+    "openai": (call_openai, lambda: OPENAI_MODEL, "OPENAI_API_KEY"),
 }
 
 

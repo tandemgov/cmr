@@ -89,6 +89,7 @@ def consolidate_judgments(judgments: list[dict]) -> dict[str, str]:
       - both 'different' → 'different'
       - all 'unclear' or empty → 'unclear'
       - disagreement → 'unclear'
+      - fewer than two usable verdicts → 'unclear'
     """
     by_cand: dict[str, list[str]] = defaultdict(list)
     for j in judgments:
@@ -98,6 +99,10 @@ def consolidate_judgments(judgments: list[dict]) -> dict[str, str]:
 
     out = {}
     for cid, verdicts in by_cand.items():
+        # One judge is not a consensus. Without this, a panel degraded by an outage silently promotes on a single vote.
+        if len(verdicts) < 2:
+            out[cid] = "unclear"
+            continue
         vs = set(verdicts)
         if vs == {"same"}:
             out[cid] = "same"
