@@ -550,11 +550,10 @@ uv run python pipeline/mandate_classify.py --pilot --negatives 8000 --judge-n 30
 | 1. recipient gate | regex, `passes_gate()` | **~72% recall** (frontier-audited) | 583,422 → **64,233** |
 | 2. sweep | nemotron, thinking off | 95.6% recall / 82.6% prec **on gold** | — |
 | 3. confirm | gemma-26B | 93.9% / 94.7% **on gold** | — |
-| 4. currency | `currency.py` | — | drops 4.5% |
-| **end-to-end** | | **90.5% precision, ~72% recall** | |
+| 4. currency | `currency.py` | — | drops 7.7% |
+| **end-to-end** | | **88.1% precision, ≤70% recall** | |
 
-Precision is frontier-audited on a 400-row stratified sample (§ Precision
-below). Recall is frontier-audited on 1,000 gate-rejected rows (§ Recall).
+Precision is frontier-audited on two stratified samples, 400 and 505 rows (§ Precision below); the figure quoted is the second, weighted back to the live frame. Recall is frontier-audited on 1,000 gate-rejected rows and is a **ceiling with a wide band** — 63–80% — because only stage-1 misses were sampled (§ Recall).
 Recall is weighted over precision throughout, because a false positive is
 rejected downstream while a false negative is invisible in a 583k-provision
 corpus — which is exactly why recall needed measuring rather than asserting.
@@ -839,7 +838,22 @@ Recall cannot be measured by sampling rejects uniformly: with ~0.4% of the
 | unusual recipient (`both Houses`, `majority leader`, …) | 834 | 400 | 6 | ~12 |
 | residual | 480,779 | 200 | **0** | ~0 |
 
-**~2,079 missed; recall ≈ 72%** against 5,282 found. Cost: $5.98.
+**~2,079 missed.** Cost: $5.98.
+
+Turning that into a recall figure needs care, and the original `≈ 72%` was loose in two ways.
+
+*The denominator moved.* It was 5,282 when this was written, a count from the run whose note figures the endpoint bug voided. The current `current` count, after the repeal screen, is **5,601**.
+
+*Found and missed were not the same quantity.* `missed` counts provisions the frontier model calls genuine recurring congressional reports, so the denominator has to be genuine ones too — not the raw keep count, which §Precision puts at 88.1% in force. Precision-adjusting gives **~4,934 true positives**, and:
+
+| | found | recall |
+|---|---|---|
+| raw keep count | 5,601 | 72.9% |
+| **precision-adjusted** | **~4,934** | **≤70%** |
+
+*It is a ceiling, not a point.* The ~2,079 were sampled from **gate-rejected** provisions only, so they are the misses of stage 1. Stages 2–4 discard true positives too, and none of them are counted here. Writing it out: true positives total ≥ 4,934 + 2,079, so end-to-end recall ≤ 4,934 / 7,013 = **70.4%** — and the gate's own recall is ≥ 70.4%, since at least 4,934 true positives got through it.
+
+**Quote the band, not the point.** The estimate rests on 22 positives in one 400-row sample, so its 95% interval is ~1,240–2,920 missed — **a ceiling anywhere from 63% to 80%.** Anything finer than "roughly two-thirds to four-fifths, at best" reads precision the sample does not carry. Narrowing it means sampling that stratum harder, which is the same job as fixing it.
 
 The residual `0/200` is the load-bearing result — it shows the misses
 concentrate in one identifiable stratum rather than being smeared across half
