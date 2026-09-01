@@ -46,7 +46,7 @@ logger = logging.getLogger("match_judge")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-terra")
 
 OUT_DIR = REPO_ROOT / "compare_output"
 CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
@@ -210,9 +210,10 @@ def call_gemini(cand: dict) -> dict:
 def call_openai(cand: dict) -> dict:
     from openai import OpenAI
     client = OpenAI()
+    # GPT-5.x rejects `max_tokens`; reasoning tokens come out of this budget before any visible content, so a tight cap yields an empty string, not an error.
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
-        max_tokens=500,
+        max_completion_tokens=4000,
         response_format={"type": "json_object"},
         messages=[{"role": "system", "content": SYSTEM_PROMPT},
                   {"role": "user", "content": build_user_text(cand)}],
