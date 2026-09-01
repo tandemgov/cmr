@@ -772,9 +772,9 @@ a misleading 28/48.
 
 ### Precision — frontier-audited
 
-400 rows sampled from the live set, stratified by frequency, adjudicated by
-`claude-opus-5` at medium effort ($3.62, 400/400 parsed). Each part of the
-claim was judged independently:
+Two audits, both adjudicating each part of the claim independently with `claude-opus-5` at medium effort. The first predates `iter_notes()` and so samples provisions only; the second was run after notes became candidates and splits by source.
+
+**Audit 1 — 400 provisions, stratified by frequency** ($3.62, 400/400 parsed):
 
 | Opus 5 confirms | | |
 |---|---|---|
@@ -782,12 +782,33 @@ claim was judged independently:
 | …and is recurring | 374/400 | 93.5% ±2.4 |
 | …and is still in force | 362/400 | **90.5% ±2.9** |
 
-Errors concentrate in the cheap metadata filters, not the hard judgment:
-15 one-time duties mislabelled recurring, 12 lapsed, 11 not congressional.
-The `frequency` prompt in `JUDGE_SYSTEM` was tightened in response — a
-deadline is not a cadence, and recurrence needs explicit language.
+Errors concentrate in the cheap metadata filters, not the hard judgment: 15 one-time duties mislabelled recurring, 12 lapsed, 11 not congressional. The `frequency` prompt in `JUDGE_SYSTEM` was tightened in response — a deadline is not a cadence, and recurrence needs explicit language.
 
-Verdicts with reasoning: `data/gold/adjudication.jsonl`.
+**Audit 2 — 505 rows drawn from `sweep_live.jsonl`, 354 provisions and 151 notes** (538k in / 96k out tokens, 505/505 parsed):
+
+Notes are **deliberately over-sampled** — 29.9% of the sample against 8.4% of the live set — because the point was to characterise a new stratum, not to re-measure the whole. So the raw sample column is not an estimate of anything; weight the strata back by their size in the live set (5,559 provisions, 508 notes), the same move §Recall makes:
+
+| Opus 5 confirms | provisions | notes | raw sample | **live set, weighted** | live rows |
+|---|---|---|---|---|---|
+| is a congressional reporting duty | 349/354 (98.6%) | 135/151 (89.4%) | 95.8% | **97.8% ±1.2** | ~5,935 |
+| …and is recurring | 333/354 (94.1%) | 129/151 (85.4%) | 91.5% | **93.3% ±2.3** | ~5,663 |
+| …and is still in force | 317/354 (89.5%) | **69/151 (45.7%)** | 76.4% | **85.9% ±3.0** | ~5,210 |
+
+The provision column reproduces audit 1 within noise on all three rows, which is what licenses reading the rest of the table as a stratum effect rather than drift.
+
+**Read the weighted column, not the raw one.** The 76.4% raw figure describes the sample's own composition and overstates the damage by roughly 9 points; the live set's in-force rate is 85.9%, a ~4.6 point fall from audit 1. Notes are a real problem and a small one, because they are only 8.4% of what the sweep keeps.
+
+#### Notes are half dead, and the note text says so
+
+**Over half the notes the judge accepts describe a duty that no longer exists** — 50.3% fail the in-force test against 5.9% of provisions. The mechanism is structural rather than a tuning gap. A statutory note often exists *because* the underlying section was repealed: it is the editorial trace of a dead duty, written in the past tense. The judge reads a description of a duty as a duty.
+
+The evidence is legible in the note itself. Of the 62 notes accepted as recurring congressional reports but rejected as in force, **61 cite repeal, termination, lapse, or expiry** — usually with a date and a Pub. L. number. Zero of the 21 out-of-force provisions cite repeal; those are ordinary sunsets. Same shape in the outright rejections: 14 of the 16 rejected notes are repeal notes, the other two a permissive `may submit` and an executive order cross-referencing duties created elsewhere.
+
+So this is a filter the judge is not applying, not a judgment it is getting wrong — which makes it cheap to fix. A currency screen over note text (past-tense duty verb plus a repeal or termination marker) can run offline against text already in hand. Scaled to the live set, it should retire **~256 of the 508 note-sourced rows**, taking the live count from 6,067 to roughly 5,811. Until it exists, **treat any note-sourced mandate as unverified for currency**, and never quote a note and provision figure pooled at sample proportions.
+
+This is the sweep-path form of a hazard already recorded under §Note-citation selection, where `19 U.S.C. 2703 note` resolved to a termination notice rather than the live report it meant. Notes that announce the death of a duty are a recurring trap in this corpus, in both paths.
+
+Verdicts with reasoning: `data/gold/adjudication.jsonl` (audit 1), `data/gold/adjudication_v2.jsonl` (audit 2). Neither file has a generating script checked in; both were produced ad hoc, so reproducing either means rebuilding the harness.
 
 ### Recall — frontier-audited
 
