@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from collections import Counter, defaultdict
@@ -39,6 +40,8 @@ CANDIDATES_PATH = OUT_DIR / "candidates.jsonl"
 UNCOVERED_PATH = OUT_DIR / "uncovered_mandates.jsonl"
 ORPHAN_PATH = OUT_DIR / "orphan_submissions.jsonl"
 MANDATE_COV_PATH = OUT_DIR / "mandate_coverage.jsonl"
+# match.py owns the coverage views; rewrite_views_post_judge edits them in place, so a second run strips attachments that never come back.
+POST_JUDGE_STAMP = OUT_DIR / ".post_judge_stamp"
 JUDGMENTS_PATH = OUT_DIR / "match_judgments.jsonl"
 
 FINAL_MATCHES_PATH = OUT_DIR / "final_matches.jsonl"
@@ -207,6 +210,26 @@ def write_final_matches(
                     promoted += 1
 
     return confident_written, promoted, a_validation_rejected
+
+
+def _coverage_fingerprint() -> str:
+    return hashlib.sha256(MANDATE_COV_PATH.read_bytes()).hexdigest()
+
+
+def assert_views_are_pristine() -> None:
+    """Refuse to post-judge views that a previous run already post-judged.
+
+    The edits are destructive and verdict-dependent: a second pass under
+    different verdicts silently drops attachments the first pass stripped.
+    """
+    if not (POST_JUDGE_STAMP.exists() and MANDATE_COV_PATH.exists()):
+        return
+    if POST_JUDGE_STAMP.read_text().strip() == _coverage_fingerprint():
+        raise SystemExit(
+            "compare_output/mandate_coverage.jsonl was already rewritten by a previous "
+            "compare.py run. Re-running now would strip attachments permanently. "
+            "Regenerate the views first:\n\n    uv run python pipeline/match.py\n"
+        )
 
 
 def rewrite_views_post_judge(
@@ -925,7 +948,9 @@ def main() -> None:
             if judge_verdicts.get(cid) == "same":
                 judge_promoted_stage_b.append({"mandate_id": c["mandate_id"], "package_id": c["package_id"]})
 
+    assert_views_are_pristine()
     rewrite_views_post_judge(a_validation_rejected, judge_promoted_stage_a, judge_promoted_stage_b, raw_submissions)
+    POST_JUDGE_STAMP.write_text(_coverage_fingerprint() + "\n")
     # Reload mandate_cov, uncovered, and orphans — rewrite_views_post_judge
     # updated all three files; the variables loaded before judge processing
     # are now stale.
