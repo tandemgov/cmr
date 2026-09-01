@@ -258,6 +258,9 @@ def load_existing(path: Path) -> set[tuple[str, str]]:
         for line in f:
             try:
                 rec = json.loads(line)
+                # A failed call is not a verdict. Recording one as done retires the pair forever, which is how 441 depleted-quota 429s became permanent gaps.
+                if rec.get("verdict") is None:
+                    continue
                 done.add((rec["candidate_id"], rec["judge"]))
             except Exception:
                 pass

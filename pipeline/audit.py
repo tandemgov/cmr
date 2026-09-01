@@ -537,7 +537,9 @@ def render(checks: dict) -> str:
             else:
                 L.append(f"  - GPO title: {c['submission'].get('title','')[:100]}")
             for j in js:
-                L.append(f"  - **{j['judge']}** ({j['verdict']}): {j.get('reasoning','')[:200]}")
+                verdict = j["verdict"] or "no verdict"
+                why = (j.get("reasoning") or j.get("error") or "")[:200]
+                L.append(f"  - **{j['judge']}** ({verdict}): {why}")
         L.append("")
 
     # 4
