@@ -33,7 +33,7 @@ began **October 2023**.
 <div class="text-sm opacity-90">what's owed · the Clerk's "House Doc," a 476-page PDF</div>
 </div>
 <div class="mt-4">
-<div class="text-3xl font-bold">1,057 filings</div>
+<div class="text-3xl font-bold">1,176 filings</div>
 <div class="text-sm opacity-90">what's delivered · GPO's CMR collection, JSON API</div>
 </div>
 
@@ -77,7 +77,7 @@ Parse failures masquerade as compliance findings.
 
 **Take 1: citations as the anchor.** Parse USC, Pub. L., and Stat. cites from both sides;
 intersect; LLM judges adjudicate the borderline pile. This works well when both sides cite
-the same statute the same way, and it matched **22%** of filings. But structured citation
+the same statute the same way, and it matched **29%** of filings. But structured citation
 metadata is still sparse in these early deposits, so most filings never got compared to
 anything at all.
 
@@ -93,8 +93,8 @@ CMS's report under SSA, USDA's under Interior).
 <v-click>
 
 <div class="mt-8 text-center text-xl">
-<b>22% → 62%</b> of filings matched (659 of 1,057)<br/>
-<span class="text-base">mandates with at least one deposit: <b>92 → 266</b></span>
+<b>29% → 61%</b> of filings matched (719 of 1,176)<br/>
+<span class="text-base">mandates with at least one deposit: <b>150 → 295</b></span>
 </div>
 
 </v-click>
@@ -218,19 +218,19 @@ one, the answer is the same.
 
 # 6 · Finding two: the House Doc has gaps too
 
-**395 filings (37%) match nothing in the House Doc, after both passes.** Each is, by
+**457 filings (39%) match nothing in the House Doc, after both passes.** Each is, by
 definition, congressionally mandated: it's in the CMR collection. They collapse to
-**298 distinct candidate gaps**, in three evidence tiers:
+**334 distinct candidate gaps**, in three evidence tiers:
 
 <v-clicks>
 
-- **68 verified strongest**: the filing's own stated cite is absent from the entire Doc,
+- **71 verified strongest**: the filing's own stated cite is absent from the entire Doc,
   and 6 of 8 spot-checked sections carry explicit committee-submission duties. Includes a
   contiguous band of Coast Guard reporting statutes (14 U.S.C. 5111–5113, 719, 903, 1155)
   and Education's flagship **Condition of Education** (20 U.S.C. 9545)
 - **4 entities with zero rows anywhere**: EEOC, FLRA, Election Assistance Commission,
   Udall Foundation
-- **The rest pending**: 58 are possible missed matches under listed statutes; 172 await
+- **The rest pending**: 87 are possible missed matches under listed statutes; 176 await
   authority extraction from their transmittal letters
 
 </v-clicks>
@@ -258,7 +258,7 @@ Both findings are bounded by metadata quality. The fixes share one move:
 - **Transmittal letters as ground truth.** Every filed report states its own authority on
   page one, and GPO has the PDFs. Extracting those closes the 172 cite-less gap clusters
   and turns match corroboration into verification
-- **Adversarial verification** of the 426 LLM matches, weakest corroboration first
+- **Adversarial verification** of the 719 LLM matches, weakest corroboration first
 
 </v-clicks>
 

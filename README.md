@@ -7,7 +7,7 @@ Two subsystems, run in sequence.
 Congress"* (House Document [CDOC-119hdoc4](data/CDOC-119hdoc4.pdf)) into
 clean, typed records — 3,297 mandates. Deterministic: no LLM, no randomness.
 
-**`pipeline/` — the GPO comparison.** Joins those mandates against the ~1,057
+**`pipeline/` — the GPO comparison.** Joins those mandates against the ~1,176
 packages agencies have filed to GPO's Congressionally Mandated Reports
 collection since January 2024, to ask which required reports were actually
 filed, which are visibly overdue, and which filings tie back to no known
