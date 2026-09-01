@@ -675,6 +675,62 @@ Wall-clock notes: a `light` compile is ~30 min against this host, and MIPROv2
 needs the `optuna` extra (`uv sync --extra dspy`) or it raises only after
 bootstrapping and instruction proposal have already been paid for.
 
+#### Per-row forensics: what the optimizer actually bought
+
+Aggregate confusion counts cannot tell a systematic recall hole from two
+coin-flips near the boundary. `--slice`-wise per-row dumps
+(`experiments/dspy_output/preds_*.jsonl`) can. Pooled over test + val, 129 gold
+positives:
+
+| arm | FN | FP |
+|---|---|---|
+| baseline (handwritten) | 3 | 30 |
+| variant: xref clause | 4 | 28 |
+| variant: approp clause | 3 | 31 |
+| variant: both clauses | 3 | 28 |
+| DSPy compiled (corrected) | **1** | 39 |
+
+The disagreement on positives is strictly one-directional — the compiled prompt
+catches 2 the handwritten one misses, and the handwritten one catches nothing
+the compiled one misses. But 2–0 discordant pairs is McNemar's exact p = 0.5.
+Direction is clean; magnitude is not there.
+
+**Two hypotheses about the mechanism, both refuted.**
+
+*"Appropriations language masks reporting duties."* `43 USC 1748` hides a
+biennial submission to the Speaker and the President of the Senate behind an
+opening appropriations clause, and both arms miss it. But of the 6 gold
+positives whose text carries appropriations-authorization language, the baseline
+catches 5 — the pattern does not predict misses, and a variant targeting that
+clause changes no prediction on any of them. Nor is depth the explanation: the
+reporting verb in `1748` sits at char 742, while caught positives run to a p90
+of 1705.
+
+*"The win is a threshold shift, reproducible by editing one clause."* Three
+single-clause variants of `JUDGE_SYSTEM` (`experiments/make_variants.py`, which
+asserts an exact one-clause diff so a reworded upstream prompt fails loudly)
+recover **neither** catch. `xref` makes recall worse, trading a true positive
+for three false positives. The compiled prompt is the only arm that moves
+recall, so its advantage is not something to hand-replicate — which was the
+load-bearing argument for not adopting it, and it is gone.
+
+The three baseline misses are idiosyncratic rather than a class: a form-spec
+sub-element (`22 USC 8003(g)(4)`), a conditional presidential notification
+(`22 USC 8743(c)(1)(A)`), and the buried biennial submission above. A sharper
+answer needs more adjudicated rows, not more prompt engineering — that is now
+demonstrated rather than asserted.
+
+#### A degrading host renders as a recall collapse, not an error
+
+An unparsed response counts as negative, so an endpoint that fails mid-run
+produces plausible-looking scores. One variant recorded 0.0% recall with 0 false
+positives on 167/167 unparsed, and another 40.4% on 75/115; every prompt
+replayed clean afterwards. `run_baseline` now refuses to save any score built on
+more than 2% unparsed. When diagnosing this, note that a bare `curl` to the chat
+endpoint reasons by default and returns empty `content` — a health check must
+send `chat_template_kwargs.enable_thinking = false` or it reproduces the
+symptom and misdiagnoses the cause.
+
 ### Note-citation selection
 
 A busy section carries many statutory notes, so returning all of them buries

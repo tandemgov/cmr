@@ -406,5 +406,141 @@
       }
     },
     "unparsed": 0
+  },
+  "variant_approp_test": {
+    "n": 167,
+    "tp": 75,
+    "fp": 20,
+    "fn": 2,
+    "tn": 70,
+    "recall": 0.974025974025974,
+    "precision": 0.7894736842105263,
+    "f2": 0.9305210918114144,
+    "accuracy": 0.8682634730538922,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 24
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 24
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 20
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 68
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 9
+      }
+    },
+    "unparsed": 0
+  },
+  "variant_approp_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 11,
+    "fn": 1,
+    "tn": 52,
+    "recall": 0.9807692307692307,
+    "precision": 0.8225806451612904,
+    "f2": 0.9444444444444444,
+    "accuracy": 0.8956521739130435,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 52
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 6
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 17
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 13
+      }
+    },
+    "unparsed": 0
+  },
+  "variant_both_test": {
+    "n": 167,
+    "tp": 75,
+    "fp": 18,
+    "fn": 2,
+    "tn": 72,
+    "recall": 0.974025974025974,
+    "precision": 0.8064516129032258,
+    "f2": 0.9351620947630923,
+    "accuracy": 0.8802395209580839,
+    "by_stratum": {
+      "known_mandate": {
+        "n": 25,
+        "correct": 24
+      },
+      "gate_fail": {
+        "n": 28,
+        "correct": 25
+      },
+      "mentions_congress": {
+        "n": 25,
+        "correct": 20
+      },
+      "gate_pass": {
+        "n": 78,
+        "correct": 69
+      },
+      "no_congress": {
+        "n": 11,
+        "correct": 9
+      }
+    },
+    "unparsed": 0
+  },
+  "variant_both_val": {
+    "n": 115,
+    "tp": 51,
+    "fp": 10,
+    "fn": 1,
+    "tn": 53,
+    "recall": 0.9807692307692307,
+    "precision": 0.8360655737704918,
+    "f2": 0.9479553903345725,
+    "accuracy": 0.9043478260869565,
+    "by_stratum": {
+      "gate_pass": {
+        "n": 54,
+        "correct": 52
+      },
+      "known_mandate": {
+        "n": 17,
+        "correct": 15
+      },
+      "no_congress": {
+        "n": 7,
+        "correct": 6
+      },
+      "mentions_congress": {
+        "n": 17,
+        "correct": 17
+      },
+      "gate_fail": {
+        "n": 20,
+        "correct": 14
+      }
+    },
+    "unparsed": 0
   }
 }

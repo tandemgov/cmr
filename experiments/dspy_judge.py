@@ -317,6 +317,13 @@ def run_baseline(examples: list[dspy.Example], slice_name: str, arm: str = "") -
     print_score(f"baseline (handwritten JUDGE_SYSTEM) on {slice_name}", s)
     if unparsed:
         print(f"  {unparsed} responses failed to parse (counted as negative)")
+    # An unparsed response counts as negative, so a degrading host renders as a plausible recall collapse rather than an error. RUNBOOK section 12.
+    if unparsed > 0.02 * len(examples):
+        raise SystemExit(
+            f"{unparsed}/{len(examples)} responses unparsed -- refusing to save a "
+            f"score built on them. Check the endpoint (a bare request reasons and "
+            f"returns empty content) and re-run."
+        )
     if arm:
         save_predictions(arm, examples, preds)
     return s
