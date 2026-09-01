@@ -784,27 +784,44 @@ Two audits, both adjudicating each part of the claim independently with `claude-
 
 Errors concentrate in the cheap metadata filters, not the hard judgment: 15 one-time duties mislabelled recurring, 12 lapsed, 11 not congressional. The `frequency` prompt in `JUDGE_SYSTEM` was tightened in response — a deadline is not a cadence, and recurrence needs explicit language.
 
-**Audit 2 — 505 rows drawn from `sweep_live.jsonl`, 354 provisions and 151 notes** (538k in / 96k out tokens, 505/505 parsed):
+**Audit 2 — 505 rows, 354 provisions and 151 notes** (538k in / 96k out tokens, 505/505 parsed).
 
-Notes are **deliberately over-sampled** — 29.9% of the sample against 8.4% of the live set — because the point was to characterise a new stratum, not to re-measure the whole. So the raw sample column is not an estimate of anything; weight the strata back by their size in the live set (5,559 provisions, 508 notes), the same move §Recall makes:
+Mind the frame. The sample was drawn from the rows `currency.py` had already classified `current` — 5,731 at the time, not the whole 6,067-row confirmed set — and notes were **deliberately over-sampled**, 29.9% of the sample against 7.4% of that frame, because the point was to characterise a new stratum rather than re-measure the whole. The raw sample column therefore estimates nothing on its own. Weight the strata back by their size in the frame (5,308 provisions, 423 notes), the same move §Recall makes:
 
-| Opus 5 confirms | provisions | notes | raw sample | **live set, weighted** | live rows |
+| Opus 5 confirms | provisions | notes | raw sample | **frame, weighted** | rows |
 |---|---|---|---|---|---|
-| is a congressional reporting duty | 349/354 (98.6%) | 135/151 (89.4%) | 95.8% | **97.8% ±1.2** | ~5,935 |
-| …and is recurring | 333/354 (94.1%) | 129/151 (85.4%) | 91.5% | **93.3% ±2.3** | ~5,663 |
-| …and is still in force | 317/354 (89.5%) | **69/151 (45.7%)** | 76.4% | **85.9% ±3.0** | ~5,210 |
+| is a congressional reporting duty | 349/354 (98.6%) | 135/151 (89.4%) | 95.8% | **97.9% ±1.2** | ~5,611 |
+| …and is recurring | 333/354 (94.1%) | 129/151 (85.4%) | 91.5% | **93.4% ±2.3** | ~5,354 |
+| …and is still in force | 317/354 (89.5%) | **69/151 (45.7%)** | 76.4% | **86.3% ±3.0** | ~4,947 |
 
-The provision column reproduces audit 1 within noise on all three rows, which is what licenses reading the rest of the table as a stratum effect rather than drift.
+The provision column reproduces audit 1 within noise on all three rows, which licenses reading the rest as a stratum effect rather than drift. Read the weighted column: the raw 76.4% describes the sample's own composition and overstates the damage by about ten points.
 
-**Read the weighted column, not the raw one.** The 76.4% raw figure describes the sample's own composition and overstates the damage by roughly 9 points; the live set's in-force rate is 85.9%, a ~4.6 point fall from audit 1. Notes are a real problem and a small one, because they are only 8.4% of what the sweep keeps.
+#### Notes describe repealed duties, and the note says so
 
-#### Notes are half dead, and the note text says so
+**54% of the notes reaching `current` were not in force**, against 5.9% of provisions. The mechanism is structural rather than a tuning gap. A statutory note often exists *because* the underlying section was repealed — it is the editorial trace of a dead duty, written in the past tense — and the judge reads a description of a duty as a duty.
 
-**Over half the notes the judge accepts describe a duty that no longer exists** — 50.3% fail the in-force test against 5.9% of provisions. The mechanism is structural rather than a tuning gap. A statutory note often exists *because* the underlying section was repealed: it is the editorial trace of a dead duty, written in the past tense. The judge reads a description of a duty as a duty.
+The evidence is legible in the note itself, and `currency.py` was missing all of it: every one of the 82 dead notes in the sample scored `current`. `_REVIEW_RE` looks for `repealed effective`, and repeal notes say *"Repealed by Pub. L. 93-…"* instead.
 
-The evidence is legible in the note itself. Of the 62 notes accepted as recurring congressional reports but rejected as in force, **61 cite repeal, termination, lapse, or expiry** — usually with a date and a Pub. L. number. Zero of the 21 out-of-force provisions cite repeal; those are ordinary sunsets. Same shape in the outright rejections: 14 of the 16 rejected notes are repeal notes, the other two a permissive `may submit` and an executive order cross-referencing duties created elsewhere.
+Widening that is a precision problem, so the pattern was chosen by measurement against the 151 adjudicated notes rather than by eye:
 
-So this is a filter the judge is not applying, not a judgment it is getting wrong — which makes it cheap to fix. A currency screen over note text (past-tense duty verb plus a repeal or termination marker) can run offline against text already in hand. Scaled to the live set, it should retire **~256 of the 508 note-sourced rows**, taking the live count from 6,067 to roughly 5,811. Until it exists, **treat any note-sourced mandate as unverified for currency**, and never quote a note and provision figure pooled at sample proportions.
+| candidate | catches (of 82 dead) | kills (of 69 live) |
+|---|---|---|
+| `repealed by\|effective` | 1 | 0 |
+| **bare `repeal`** | **41** | **0** |
+| `repeal\|terminat\|omitted` | 53 | 10 |
+
+Bare `repeal` is the keeper. The wider pattern buys 12 more catches for 10 live notes and is rejected. **The test is note-scoped**: on provisions bare `repeal` catches 0 of 37 dead and costs a live row, because a provision that mentions repeal is usually repealing something else.
+
+Applied, it moves 130 rows from `current` to `expired` and drops 41 of the 505 audited rows — **41 of which the frontier model independently calls dead, for zero false positives on the sample.** The frame's numbers after the screen:
+
+| | before | after |
+|---|---|---|
+| rows classified `current` | 5,731 | **5,601** |
+| notes among them | 423 (7.4%) | 293 (5.2%) |
+| notes still in force | 45.7% | **62.7%** |
+| weighted in force | 86.3% ±3.0 | **88.1% ±3.1** |
+
+Notes remain the weaker stratum — 62.7% against provisions' 89.5% — so this recovers roughly half the note error mass, not all of it. The residue needs either a pattern that survives the live-note test above or a judge pass over note text specifically; **note-sourced mandates are still the least trustworthy rows in the set.**
 
 This is the sweep-path form of a hazard already recorded under §Note-citation selection, where `19 U.S.C. 2703 note` resolved to a termination notice rather than the live report it meant. Notes that announce the death of a duty are a recurring trap in this corpus, in both paths.
 

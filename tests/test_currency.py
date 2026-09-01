@@ -93,6 +93,31 @@ class TestClassify:
         assert cu.classify(text, 2026)[0] == "current"
         assert cu.classify(text, 2027)[0] == "expired"
 
+    def test_a_repeal_note_is_expired(self):
+        status, reason = cu.classify(
+            "Section 402 of Pub. L. 93-153, which required the Secretary to report "
+            "annually to Congress, was repealed by Pub. L. 104-66.", YEAR, is_note=True)
+        assert status == "expired"
+        assert "repeal" in reason
+
+    def test_the_repeal_test_does_not_apply_to_provisions(self):
+        """Bare `repeal` catches no dead provision and costs a live one — RUNBOOK section 12."""
+        text = ("The Secretary shall report annually to Congress on sections repealed "
+                "by this Act.")
+        assert cu.classify(text, YEAR, is_note=True)[0] == "expired"
+        assert cu.classify(text, YEAR)[0] == "current"
+
+    def test_a_live_note_without_repeal_language_survives(self):
+        assert cu.classify(
+            "The Administrator shall transmit to Congress an annual report on the program.",
+            YEAR, is_note=True) == ("current", "")
+
+    def test_a_passed_sunset_outranks_a_repeal_note(self):
+        status, reason = cu.classify(
+            "reports were required annually through 2011 until repealed", YEAR, is_note=True)
+        assert status == "expired"
+        assert "2011" in reason
+
 
 class TestAnnotate:
     @pytest.fixture

@@ -81,16 +81,26 @@ def terminal_year(text: str) -> int | None:
     return max(years) if years else None
 
 
-def classify(text: str, year: int) -> tuple[str, str]:
+# A note often exists because its section was repealed, so it describes a dead duty. Notes only, and bare by measurement — RUNBOOK section 12.
+_REPEAL_NOTE_RE = re.compile(r"(?i)repeal")
+
+
+def classify(text: str, year: int, is_note: bool = False) -> tuple[str, str]:
     """Return ``(status, reason)`` for one provision.
 
-    ``expired`` — a stated end bound has passed.
+    ``expired`` — a stated end bound has passed, or a note announces a repeal.
     ``review``  — temporary or termination language; undecidable from the text.
     ``current`` — no signal that the duty has lapsed.
+
+    ``is_note`` gates the repeal test: sound on notes, harmful on provisions — RUNBOOK section 12.
     """
     end = terminal_year(text)
     if end is not None and end < year:
         return "expired", f"stated end bound {end} has passed"
+    if is_note:
+        m = _REPEAL_NOTE_RE.search(text or "")
+        if m:
+            return "expired", f"note announces a repeal: {m.group(0)!r}"
     m = _REVIEW_RE.search(text or "")
     if m:
         return "review", f"temporary/termination language: {m.group(0)!r}"
@@ -129,7 +139,9 @@ def annotate(year: int, confirmed: Path = CONFIRMED_PATH,
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as fh:
         for r in kept:
-            status, reason = classify(text.get(r["uslm_id"], ""), year)
+            uslm_id = r["uslm_id"]
+            status, reason = classify(text.get(uslm_id, ""), year,
+                                      is_note="/note/" in uslm_id)
             tally[status] += 1
             fh.write(json.dumps({
                 "uslm_id": r["uslm_id"],
