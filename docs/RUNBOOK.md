@@ -10,7 +10,7 @@ The House Document `CDOC-119hdoc4` lists **every standing report Congress
 requires** from federal entities — 3,297 mandate rows after extraction.
 The 2022 Congressionally Mandated Reports Act (CMRA) created a public GPO
 repository where executive-branch agencies must file copies of those reports
-on an ongoing basis — about 1,057 packages since Jan 2024.
+on an ongoing basis — about 1,176 packages since Jan 2024.
 
 This pipeline **joins those two datasets** so you can ask:
 
@@ -53,7 +53,7 @@ after `compare.py`:
 
 ```bash
 # v2 pass 1: filing-first LLM matching against the filer's House Doc slice
-# (~1057 filings, resumable, LLM cost)
+# (~1176 filings, resumable, LLM cost)
 uv run python pipeline/match_v2.py
 
 # v2 pass 2: corpus-wide rescue for pass-1 "none" verdicts (resumable)
@@ -82,7 +82,7 @@ gitignored. If you only want to rebuild the views without re-fetching,
 data/CDOC-119hdoc4.pdf       govinfo.gov API (collection=CMR)
         │                            │
         ▼                            ▼
-extraction/main.py           pipeline/gpo_fetch.py (~1057 pkgs)
+extraction/main.py           pipeline/gpo_fetch.py (~1176 pkgs)
         │                            │
         ▼                            ▼
 data/cmra_extract.jsonl      data/gpo/packages/*.json
@@ -154,7 +154,21 @@ data/cmra_extract.jsonl      data/gpo/packages/*.json
 | **A** | `requirement.legalAuthority` ↔ House Doc `authority` via parsed USC/PLAW/Stat citations | **High.** Matches are essentially deterministic; spot-check anyway. | Requirement record exists but is empty (handled by `references` fallback). |
 | **B1** | Package `references` (parsed citations) ↔ mandate | **Medium-high.** Same signal as A, just one level less canonical (per-package vs per-requirement). | Wrong subsection of the same statute; multiple mandates citing the same authority. |
 | **B2** | Token jaccard of GPO `title` vs House Doc `nature_of_report`, blocked by canonical agency | **Low without a judge.** The two corpora phrase the same report very differently. | Reasonable-looking title matches a topically-related but different mandate. |
-| **Judge** | Claude+Gemini both vote "same" on the (mandate, GPO record) pair | **High when both agree.** Disagreements/unclear stay as candidates. | Both LLMs being charitably wrong about a near-miss (rare; we saw the inverse — over-rejecting on wording). |
+| **Judge** | Claude + GPT-5.6-terra both vote "same" on the (mandate, GPO record) pair | **High when both agree.** Fewer than two usable verdicts, or any disagreement, resolves to `unclear` and stays a candidate. | Both LLMs charitably wrong about a near-miss (rare); the measured error runs the other way — see below. |
+
+### Choosing the second judge
+
+The panel was Claude + Gemini until Gemini's quota was exhausted mid-run. Its replacement was picked by measurement rather than by spec sheet: two candidates judged all 444 current candidates, scored against Claude, with `claude-opus-5` adjudicating a 60-row sample of the disagreements. The auditor is deliberately never a judge — it is the same model behind the frontier precision and recall audits, and a panel that includes its own auditor grades its own work.
+
+| | agrees with Claude | `unclear` | errors | accuracy on contested rows |
+|---|---|---|---|---|
+| **`gpt-5.6-terra`** | **90.3%** | 3 | 0 | **60.0%** |
+| `gpt-5.6-luna` | 87.8% | 12 | 0 | 38.3% |
+| Claude (judge one) | — | 4 | 0 | 60.0% |
+
+Terra ties Claude exactly on the contested subset, which is what a peer looks like: neither dominates, so their agreement carries information. Luna loses nearly two to one on the same rows and abstains four times as often, despite being billed as ahead of Opus 4.8 — the argument for baking off rather than reading benchmarks. Read the 60% as accuracy on the hardest rows by construction; overall agreement is 90.3%.
+
+**The judge over-rejects, and now there is a number for it.** Where Claude says `different` and Terra says `same` — 30 adjudicated rows — the auditor splits **16 to 14**. Close to a coin flip. §8 item 4 suspected this; it is real, and about half as large as that item assumes. Pin the judge models: a floating alias makes verdicts non-reproducible, for the same reason the OLRC release point is pinned.
 
 The **citation signal is the foundation.** When the same `(USC title, section)`
 or `(Public Law congress, number)` or `(Stat volume, page)` appears in both
@@ -390,6 +404,8 @@ checks that an audit run can't do for you.
   resumed run after a matcher change silently mixes old and new verdicts.
   Change the prompt, the agency slice, or the candidate ranking and you must
   delete the corresponding file before re-running — not just re-run it.
+- **`compare.py` is not safely re-runnable.** `rewrite_views_post_judge` edits `mandate_coverage.jsonl` in place, but `match.py` owns that file. A second run under different verdicts cannot restore attachments the first run stripped — they are already off disk — and the drift surfaces only as a `final_matches substantive rows != mandate_coverage substantive attachments` warning that does not stop the run. `assert_views_are_pristine()` now refuses the second pass; when it fires, run `match.py` and then `compare.py`, in that order, every time.
+- **Mandate IDs are positional.** `match.py` assigns `M{i:05d}` by line number in the extract, so any change to the extract or the candidate pool re-pairs them. `match_judge.py` resumes on `(candidate_id, judge)`, so stale entries do not collide — they simply stop matching, and you quietly re-pay for judgments you already have. After the September catalog refresh only 3 of the 387 two-judge candidates from the June run survived into the new 444.
 - **Scripts no longer care about your working directory.** Every path is
   anchored to the repo root via `REPO_ROOT` in each module, so
   `python pipeline/match.py` behaves identically from anywhere. This was not
@@ -398,7 +414,14 @@ checks that an audit run can't do for you.
 - **API rate limits.** Data.gov is 1000 req/hour; the fetcher throttles to
   ~3/sec which is comfortably under. Anthropic and Gemini have their own
   per-key limits — the judge uses 8 workers by default, lower if you see
-  429s.
+  429s. OpenAI project keys additionally carry a per-project **model
+  allowlist**: a model absent from it returns `403 model_not_found` naming
+  the project, and edits in the dashboard take minutes to reach the API,
+  arriving model by model rather than all at once.
+- **GPT-5.x rejects `max_tokens`.** Use `max_completion_tokens`, and leave
+  real headroom: reasoning tokens are drawn from that budget *before* any
+  visible content, so a tight cap returns an empty string rather than an
+  error — which `parse_json_loose` turns into a null verdict.
 
 ## 10. Resolving mandates to statutory text
 
