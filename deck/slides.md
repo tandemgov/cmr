@@ -190,10 +190,16 @@ are exempt entirely. Reasonable people can read the same mandate differently.
 
 <v-click>
 
-So we bracketed it: strict reading, maximal reading, and everything between. Under every
-one, the answer is the same.
+So we bracketed it — and the destination each statute actually names is now read from its
+own text (97.5% audited), so the brackets are measured rather than assumed.
 
-<div class="mt-6 text-center text-lg">
+<div class="mt-5 flex justify-center gap-3 text-center text-sm">
+<div class="px-3 py-2 border border-gray-500/40 rounded"><b>14.4%</b><br/><span class="opacity-75">strict · 20/139</span></div>
+<div class="px-3 py-2 border border-gray-500/40 rounded"><b>16.9%</b><br/><span class="opacity-75">+ "to Congress" · 164/972</span></div>
+<div class="px-3 py-2 border border-gray-500/40 rounded"><b>16.4%</b><br/><span class="opacity-75">maximal · 176/1071</span></div>
+</div>
+
+<div class="mt-5 text-center text-lg">
 <b>Most mandates with a plausible deposit obligation<br/>have nothing in the repository yet.</b>
 </div>
 
@@ -252,9 +258,9 @@ Both findings are bounded by metadata quality. The fixes share one move:
 
 <v-clicks>
 
-- **Statutes as source data.** The mandate universe shouldn't be a typeset PDF. Derive it
-  from the U.S. Code and session laws directly: destination (chamber vs. committee),
-  cadence, and duty-holder are all in statute text we currently can't see
+- **Statutes as source data — started.** Destination *is* readable: 96.2% of mandates now
+  resolve to their operative text, and reading chamber-vs-committee out of it (97.5%
+  audited) grows the defensible denominator 110 → 139. Cadence and duty-holder are next
 - **Transmittal letters as ground truth.** Every filed report states its own authority on
   page one, and GPO has the PDFs. Extracting those closes the 172 cite-less gap clusters
   and turns match corroboration into verification

@@ -312,7 +312,8 @@ checks that an audit run can't do for you.
 | `pipeline/plaw_fetch.py` | Resolves the *uncodified* mandates against govinfo's PLAW collection (public-law text) |
 | `pipeline/cadence.py` | "When-expected" string → cadence label + freshness window |
 | `pipeline/match.py` | The v1 matcher (Stage A / B1 / B2) — outputs candidates + confident matches |
-| `pipeline/match_judge.py` | LLM judge harness (Claude + Gemini) for fuzzy candidates |
+| `pipeline/match_judge.py` | LLM judge harness (Claude + GPT-5.6-terra) for fuzzy candidates |
+| `pipeline/destination.py` | Reads chamber-vs-committee destination out of resolved statutory text — the obligation prong (see §13) |
 | `pipeline/compare.py` | Consolidates judge verdicts into final outputs + writes `REPORT.md` |
 | `pipeline/audit.py` | Comprehensive reviewer audit — produces `AUDIT.md` |
 | `pipeline/match_v2.py` | v2 pass 1: filing-first LLM matching against the filer's House Doc slice |
@@ -900,3 +901,55 @@ Now `committees?\s+(?:on|of)`, plus `joint committee`, `congressional budget
 office`, `clerk of the house`, and `secretary of the senate`. Caught by a unit
 test, not by inspection; practical impact was smaller than feared (113
 provisions) because chapeau context usually supplied another matching token.
+
+## 13. Reading destination out of the statute
+
+CMRA's deposit obligation has two prongs: **chamber-directed** reports are covered at any statute age, **committee-directed** ones only under statutes enacted on or after Pub. L. 117-263. Destination therefore decides whether a pre-CMRA mandate is obligated at all.
+
+`scoped_compliance.py` used to answer "we can't tell", and excluded 2,921 of 3,297 mandates on that basis — every compliance figure rested on 3% of the corpus. Its reason was sound but scoped to the wrong artifact: *the House Doc table* does not record destination. The **statute** does, and §10 had already resolved 96.2% of the Clerk's mandates to their operative text. Nothing joined the two.
+
+```bash
+uv run python pipeline/destination.py              # tier distribution
+uv run python pipeline/destination.py --sample 5   # worked examples per tier
+uv run python pipeline/destination.py --confirm    # re-judge the weak tiers (LLM, resumable)
+```
+
+### Recipients, not mentions
+
+The load-bearing distinction is between a body that *receives* a report and one merely named nearby. `43 USC`-style drafting routinely says "after consultation with the appropriate committees … shall submit to the Congress" — congress-directed, with committees appearing only as consultees. A first version matched the bare word `committees` and read that backwards, scoring **16% precision** on the committee tier.
+
+`_DELIVERY_RE` anchors on a delivery verb and takes the 240 characters after its `to` as the recipient span; `_DIRECT_OBJECT_RE` covers `notify the Congress`, which has no `to` to anchor on. Within a span a chamber officer wins outright; otherwise the *first* named recipient governs, so "to Congress, including the intelligence committees" is congress-directed.
+
+### The gate is not the verdict
+
+Audited against `claude-opus-5` on 87 mandates, the regex alone reached 96% on `congress` and 83% on `committee` — but **72% on `chamber`**, which is the only tier that moves a row into the denominator. Trusting it there would have put roughly one bad row in four into a published figure.
+
+So it is a gate, in the same shape as the sweep's: it narrows 3,172 mandates to the 525 sitting in its two weak tiers (`chamber` and `unknown`), and `gpt-5.6-terra` re-judges those. Verdicts append to `data/gold/destination.jsonl` and a null is retryable, so an outage self-heals. Re-audited after confirmation, on 85 rows:
+
+| tier | n | precision |
+|---|---|---|
+| **chamber** | 40 | **97.5%** |
+| congress | 20 | 95.0% |
+| committee | 15 | 100.0% |
+| unknown | 10 | 90.0% |
+| **overall** | **85** | **96.5%** |
+
+Corpus after confirmation: **208 chamber, 61 committee, 2,724 congress, 179 unknown**, and 125 mandates with no resolved text at all — those can never leave the upper bracket.
+
+### What it buys, and what it doesn't
+
+The defensible denominator grows from 110 to 139, and compliance falls from 15.5% to **14.4%**. A bigger denominator against a near-static numerator always lowers the rate; that is the honest direction, not a regression.
+
+The larger gain is that the reading is now measured. `congress` is the modal tier by a wide margin — 2,724 mandates say "to Congress" and name nobody narrower — so whether *that* counts as chamber-directed is the question the whole answer turns on. It now has its own bracket instead of hiding inside the upper one's blanket assumption:
+
+| reading | covered | rate |
+|---|---|---|
+| strict — chamber-directed or post-CMRA | 20/139 | **14.4%** |
+| middle — plus "to Congress" | 164/972 | **16.9%** |
+| upper — all in-window covered-entity mandates | 176/1071 | **16.4%** |
+
+The deck's claim is that the answer holds under every reading. It does, and the band is now narrow and evidenced rather than assumed.
+
+**Do not read the +29 as the ceiling of this idea, or as its floor.** Most chamber-directed pre-CMRA mandates are then removed by the entity or cadence screens, so the denominator grew 26%, not the order of magnitude the tier counts suggest. The remaining lever is the `congress` tier, and that is a legal-interpretation question, not an engineering one.
+
+**Stale figure to watch:** the upper-bracket comment in `scoped_compliance.py` cites "1,056 of 1,057 actual deposits are chamber-received" as empirical support. That is the June catalog; the catalog is now 1,176. The argument is unaffected but the number wants recomputing.
