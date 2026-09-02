@@ -32,10 +32,11 @@ Usage:
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from cadence import cmra_exempt_reason, in_cmra_window
+from destination import CHAMBER, final_destinations
 from match import ensure_extract, load_jsonl
 from normalize import parse_citations
 
@@ -85,6 +86,8 @@ def covered_mandate_ids() -> set[str]:
 def main() -> None:
     mandates = ensure_extract()
     covered = covered_mandate_ids()
+    # The chamber prong attaches at any statute age, so a chamber-directed pre-CMRA mandate is obligated too.
+    destinations = final_destinations()
 
     # v1-only numerator for the no-LLM floor
     v1_covered = {
@@ -100,8 +103,9 @@ def main() -> None:
         if is_new is None:
             tally["excluded: no PLAW cite (age undeterminable)"] += 1
             continue
-        if not is_new:
-            tally["excluded: pre-CMRA statute (obligation depends on unknown destination)"] += 1
+        chamber_directed = destinations.get(m["mandate_id"]) == CHAMBER
+        if not is_new and not chamber_directed:
+            tally["excluded: pre-CMRA statute (destination not chamber-directed)"] += 1
             continue
         if cmra_exempt_reason(m["reporting_entity"]):
             tally["excluded: exempt entity (GAO/IC/President/House-Senate-AoC)"] += 1
@@ -111,6 +115,7 @@ def main() -> None:
             tally[f"excluded: not due in window ({why})"] += 1
             continue
         tally["DENOMINATOR"] += 1
+        tally["  via post-CMRA statute" if is_new else "  via chamber-directed destination"] += 1
         row = {
             "mandate_id": m["mandate_id"],
             "reporting_entity": m["reporting_entity"],
@@ -118,6 +123,8 @@ def main() -> None:
             "authority": m["authority"],
             "when_expected": m["when_expected"],
             "cadence_reason": why,
+            "destination": destinations.get(m["mandate_id"], "unknown"),
+            "obligation_prong": "post_cmra" if is_new else "chamber",
             "covered": m["mandate_id"] in covered,
             "covered_v1_only": m["mandate_id"] in v1_covered,
         }
@@ -146,6 +153,15 @@ def main() -> None:
     ]
     upper_cov = sum(1 for m in upper_denom if m["mandate_id"] in covered)
 
+    # Middle bracket: 2,724 mandates say "to Congress" and nothing narrower, and whether that counts is the reading the answer turns on.
+    middle_denom = [
+        m for m in mandates
+        if not cmra_exempt_reason(m["reporting_entity"])
+        and in_cmra_window(m.get("when_expected", ""))[0]
+        and (post_cmra(m.get("authority", "")) or destinations.get(m["mandate_id"]) in (CHAMBER, "congress"))
+    ]
+    middle_cov = sum(1 for m in middle_denom if m["mandate_id"] in covered)
+
     result = {
         "window": "2024-01-01 → today (deposits begin 2023-10-16)",
         "screens": dict(tally),
@@ -154,6 +170,13 @@ def main() -> None:
         "covered_v1_only_floor": n_cov_v1,
         "compliance_full": round(100 * n_cov / n, 1) if n else None,
         "compliance_v1_floor": round(100 * n_cov_v1 / n, 1) if n else None,
+        "destination_tiers": dict(Counter(destinations.get(m["mandate_id"], "no_text") for m in mandates)),
+        "middle_bracket": {
+            "description": "post-CMRA statutes, plus any age where the statute names a chamber OR says 'to Congress' with no narrower recipient",
+            "denominator": len(middle_denom),
+            "covered": middle_cov,
+            "compliance": round(100 * middle_cov / len(middle_denom), 1) if middle_denom else None,
+        },
         "upper_bracket": {
             "description": "all in-window covered-entity mandates, any statute age (assumes chamber-directed)",
             "denominator": len(upper_denom),
@@ -161,7 +184,8 @@ def main() -> None:
             "compliance": round(100 * upper_cov / len(upper_denom), 1) if upper_denom else None,
         },
         "caveats": [
-            "lower bound: exempt-committee/IG/LE-sensitive rows not removable without destination data",
+            "destination read from resolved statutory text by destination.py: a regex gate, with its chamber and unknown tiers re-judged by gpt-5.6-terra; audited against claude-opus-5 at 97.5% on chamber, 96.5% overall",
+            "125 mandates have no resolved statutory text and can carry no destination, so they can only ever enter the upper bracket",
             "full-pipeline numerator includes v2 LLM matches pending adversarial verification",
             "post-CMRA screen uses newest cited Pub. L.; rows citing only USC/Stat excluded",
         ],
