@@ -8,10 +8,11 @@ Congress"* (House Document [CDOC-119hdoc4](data/CDOC-119hdoc4.pdf)) into
 clean, typed records — 3,297 mandates. Deterministic: no LLM, no randomness.
 
 **`pipeline/` — the GPO comparison.** Joins those mandates against the ~1,176
-packages agencies have filed to GPO's Congressionally Mandated Reports
-collection since January 2024, to ask which required reports were actually
-filed, which are visibly overdue, and which filings tie back to no known
-mandate at all.
+packages in GPO's Congressionally Mandated Reports collection, to ask which
+required reports were actually filed, which are visibly overdue, and which
+filings tie back to no known mandate at all. (The fetcher's `--since` is a
+*last-modified* filter, not an issue date: 337 of the 1,176 were issued before
+2024, and deposits began October 2023.)
 
 The same directory also resolves each mandate's citation to the **actual
 statutory text** — **96.2% of the Clerk's 3,297 claims**, via the current
@@ -21,8 +22,8 @@ mandate's authority really says rather than trusting the citation. See
 [RUNBOOK §10](docs/RUNBOOK.md).
 
 Start with **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — it covers the method, how
-to reproduce the comparison, and the known seams. The rest of this file covers
-the extractor only.
+to reproduce the comparison, and the known seams. The rest of this file is
+mostly the extractor; the Layout table at the bottom maps both halves.
 
 ## The extractor
 
@@ -89,6 +90,13 @@ a typo that exists verbatim in the source document (e.g. `"the the"`,
 `"Biannnually"`, `"recieved"`), or hallucinating a citation difference. The
 extractor reproduces the source faithfully, typos included.
 
+> **Provenance.** This audit ran 2026-05-21, against the 3,250-row extract that
+> preceded the current 3,297. That change was purely additive — all 3,250 rows
+> survive unchanged (RUNBOOK §6) — so the result still stands for the rows it
+> covered, but the 47 recovered rows were never judged. The raw verdicts live in
+> `verify_output/`, which is gitignored, so a reader cannot check them without
+> re-running the harness.
+
 > Note on judges: for this citation-dense task, **Claude Sonnet 4.5** and
 > **Gemini 2.5 Flash** were reliable (~98–99% agreement with ground truth);
 > **gpt-4o-mini** was not (88%, with incoherent reasoning) and should not be
@@ -100,9 +108,11 @@ extractor reproduces the source faithfully, typos included.
 uv run pytest
 ```
 
-21 tests: exact-value checks against a hand-verified 46-row fixture
-(`tests/test_doc.pdf`), structural invariants, and regression tests against the
-full PDF (every authority must close with `)`; no single-word orphan rows).
+That runs the whole suite — **284 tests** across ten modules. The extractor's
+own share is `tests/test_extract.py` (21) plus `tests/test_extraction_invariants.py`
+(7): exact-value checks against a hand-verified 46-row fixture (`tests/test_doc.pdf`),
+structural invariants, and regression tests against the full PDF (every authority
+must close with `)`; no single-word orphan rows).
 
 ## Layout
 
@@ -119,12 +129,14 @@ full PDF (every authority must close with `)`; no single-word orphan rows).
 | `pipeline/statute_fetch.py` | US Code fetch + citation→statutory-text resolution |
 | `pipeline/plaw_fetch.py` | Public-law text for the uncodified mandates |
 | `pipeline/mandate_classify.py` | Finds reporting mandates the Clerk's list misses — see [RUNBOOK §12](docs/RUNBOOK.md) |
+| `pipeline/destination.py` | Reads chamber-vs-committee destination from statutory text — see [RUNBOOK §13](docs/RUNBOOK.md) |
+| `pipeline/scoped_compliance.py` | The obligation-screened compliance denominator and its brackets |
 | `data/gold/mandate_gold.json` | 467-row adjudicated gold set for judging the judges |
 | `experiments/dspy_judge.py` | Does an optimizer beat the handwritten judge prompt? — see [RUNBOOK §12](docs/RUNBOOK.md) |
 | `docs/approach.md` | Technical design document (extractor) |
 | `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
 | `deck/` | `slides.md` (Slidev) and the images it references |
-| `data/` | Source PDF |
+| `data/` | Source PDF, plus `data/gold/` (adjudicated verdict sets) |
 | `tests/` | Test suite + fixtures |
 
 ### Validation harness

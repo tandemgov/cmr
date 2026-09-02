@@ -23,7 +23,7 @@ This pipeline **joins those two datasets** so you can ask:
 
 Prereqs: a `GOVINFO_API_KEY` in `.env` (free at
 [api.data.gov](https://api.data.gov/signup/)), and the existing
-`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` for the judge.
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for the judge (Gemini's quota is exhausted; see §4).
 
 ```bash
 # One-time GPO catalog fetch (~6 min, idempotent, resumable)
@@ -33,7 +33,7 @@ uv run python pipeline/gpo_fetch.py
 uv run python pipeline/match.py
 
 # Adjudicate the fuzzy candidate bucket with two LLMs (~10 min, ~$2)
-uv run python pipeline/match_judge.py --judges claude,gemini --workers 8
+uv run python pipeline/match_judge.py --judges claude,openai --workers 8
 
 # Produce the consolidated report
 uv run python pipeline/compare.py
@@ -46,7 +46,7 @@ open compare_output/REPORT.md compare_output/AUDIT.md
 ```
 
 That is the v1 flow, and it is where this runbook originally stopped. The v2
-matcher below addresses v1's recall problem — v1 leaves 824 of 1,057 filings
+matcher below addresses v1's recall problem — v1 leaves 835 of 1,176 filings
 unmatched — and produces `scoped_compliance.json`, the source of the
 compliance figures in `deck/slides.md`. The whitepaper predates it. Run it
 after `compare.py`:
@@ -67,6 +67,12 @@ uv run python pipeline/scoped_compliance.py
 
 open compare_output/housedoc_gaps.md compare_output/scoped_compliance.json
 ```
+
+**Two things this block will not tell you itself.**
+
+`compare.py` is **single-shot**. It rewrites coverage views that `match.py` owns, so a second run without regenerating first strips attachments permanently; `assert_views_are_pristine()` refuses rather than letting it happen. Re-running any part of this means re-running `match.py` first. See §9.
+
+`scoped_compliance.py` now depends on §10 and §13. It imports `final_destinations()` from `destination.py`, which exits unless `data/usc/provisions.jsonl` and `data/usc/plaw_provisions.jsonl` exist, and silently falls back to raw regex tiers unless `data/gold/destination.jsonl` does. From a clean checkout, run `statute_fetch.py`, `plaw_fetch.py`, and `destination.py --confirm` before the last step or it aborts.
 
 Pilot first if you are changing the matcher — `match_v2.py` takes
 `--orphans-only --sample 25 --seed 42` for a cheap representative run, and
@@ -100,7 +106,7 @@ data/cmra_extract.jsonl      data/gpo/packages/*.json
                      │
                      ▼
        compare_output/candidates.jsonl  →  match_judge.py
-                     │                          │  (Claude + Gemini)
+                     │                          │  (Claude + GPT-5.6-terra)
                      │                          ▼
                      │           compare_output/match_judgments.jsonl
                      │                          │
@@ -154,6 +160,7 @@ data/cmra_extract.jsonl      data/gpo/packages/*.json
 | **A** | `requirement.legalAuthority` ↔ House Doc `authority` via parsed USC/PLAW/Stat citations | **High.** Matches are essentially deterministic; spot-check anyway. | Requirement record exists but is empty (handled by `references` fallback). |
 | **B1** | Package `references` (parsed citations) ↔ mandate | **Medium-high.** Same signal as A, just one level less canonical (per-package vs per-requirement). | Wrong subsection of the same statute; multiple mandates citing the same authority. |
 | **B2** | Token jaccard of GPO `title` vs House Doc `nature_of_report`, blocked by canonical agency | **Low without a judge.** The two corpora phrase the same report very differently. | Reasonable-looking title matches a topically-related but different mandate. |
+| **A_validation** | A GPO requirement already tagged with a mandate, re-checked by the judge | **A demotion path, not a match path.** 119 of the current 444 candidates — the second-largest bucket. A `different` verdict *strips* an attachment the deterministic matcher had made. | The judge rejecting a correct GPO tag, silently removing a real match. |
 | **Judge** | Claude + GPT-5.6-terra both vote "same" on the (mandate, GPO record) pair | **High when both agree.** Fewer than two usable verdicts, or any disagreement, resolves to `unclear` and stays a candidate. | Both LLMs charitably wrong about a near-miss (rare); the measured error runs the other way — see below. |
 
 ### Choosing the second judge
@@ -187,7 +194,7 @@ checks that an audit run can't do for you.
 
 1. **`compare_output/REPORT.md` — first 60 lines.** Get the headline numbers
    and on-time rate. Pay attention to the **CMRA-in-scope coverage** number
-   (not the raw 2.8%) — that's the honest denominator. If anything looks off
+   (not the raw 4.5%) — that's the honest denominator. If anything looks off
    (e.g., GAO has nonzero coverage), stop and investigate before reading
    further.
 
@@ -207,7 +214,7 @@ checks that an audit run can't do for you.
    jq -c 'select(.verdict=="different")' compare_output/match_judgments.jsonl | shuf -n 15
    ```
 
-   The 175+ "different" verdicts are the largest single decision the judge
+   The ~200 "different" verdicts are the largest single decision the judge
    makes. If the judge is over-rejecting (saying "different" for actual same
    reports), you'll under-count coverage. Cross-reference 10–15 of these
    against the source — if more than 1–2 are clearly wrong rejections, the
@@ -220,7 +227,9 @@ checks that an audit run can't do for you.
    contaminated by matcher recall problems and can't stand alone.
 
 5. **`compare_output/orphan_submissions.jsonl` — top 5 agencies by count.**
-   Looking at HHS, VA, DHS specifically. For each, do 2–3 of these orphans
+   Currently VA 151, Coast Guard 128, Labor 40, ACF 35, PBGC 35 — note HHS
+   appears only through sub-agencies and DHS only as the Coast Guard, which is
+   itself the finding. For each, do 2–3 of these orphans
    *clearly* correspond to a House Doc mandate that we just didn't catch?
    If yes, that's the highest-leverage place to invest matcher improvements.
 
@@ -238,8 +247,8 @@ checks that an audit run can't do for you.
   had no rows at all in the extract, so all 7 of its GPO filings were
   structural orphans — unmatchable by construction, and easy to read as an
   agency that files without any mandate behind it. With the rows present, v2
-  matches 3 of the 7, and 2 of those land directly on recovered rows
-  (M03162 hiring/vacancies, M03159 licensing status). The third is the CRA
+  matches 4 of the 8, and 2 of those land directly on recovered rows
+  (M03162 hiring/vacancies, M03159 licensing status). One is the CRA
   umbrella row, which is procedural rather than substantive. Four remain
   genuinely unmatched.
 
@@ -257,14 +266,14 @@ checks that an audit run can't do for you.
   assertions fail, check `git status` on `data/` before suspecting the code.
 
 - **GAO submits zero CMRA reports.** CMRA's "Federal agency" definition
-  (40 U.S.C. 102, as adopted by the Act) excludes GAO by name, so GAO's 233
+  (40 U.S.C. 102, as adopted by the Act) excludes GAO by name, so GAO's 241
   mandates can never appear in CMR. This is not a bug, and those mandates
   are excluded from the headline in-scope denominator (as are intelligence
   community elements, the President, and the Senate/House/Architect of the
   Capitol). Note the Act *does* cover legislative- and judicial-branch
   establishments generally — CBO, the Library of Congress, AOUSC — which is
   why AOUSC filings appear in the collection.
-- **DoD has 4 submissions for 232 mandates.** This is real — DoD's CMRA
+- **DoD has 6 submissions for 232 mandates.** This is real — DoD's CMRA
   filing is essentially negligible and that's not a matcher artifact.
 - **The "Multiple Executive Agencies and Departments" requirements** (e.g.
   No FEAR Act #12302) have one GPO requirement record but apply to dozens
@@ -319,6 +328,9 @@ checks that an audit run can't do for you.
 | `pipeline/match_v2.py` | v2 pass 1: filing-first LLM matching against the filer's House Doc slice |
 | `pipeline/match_v2_pass2.py` | v2 pass 2: corpus-wide rescue pass for pass-1 "none" verdicts |
 | `pipeline/gap_report.py` | House Doc gap clusters — filings with no mandate row anywhere |
+| `pipeline/mandate_classify.py` | The US Code sweep for mandates the Clerk's list misses (see §12) |
+| `pipeline/currency.py` | Sunset / repeal screen over swept mandates — writes `sweep_live.jsonl` |
+| `pipeline/novelty.py` | Marks swept provisions already present in the Clerk's list |
 | `pipeline/scoped_compliance.py` | Obligation-screened compliance rate (the defensible denominator) |
 | `extraction/judge.py`, `extraction/verify.py`, `extraction/verify_report.py` | The pre-existing extraction-accuracy harness (unrelated to the comparison flow) |
 | `data/CDOC-119hdoc4.pdf` | Source House Doc |
@@ -369,10 +381,11 @@ checks that an audit run can't do for you.
    each recommendation of the specialty crops committee" without the LLM
    needing to step in.
 
-4. **Audit the "different" LLM verdicts.** If the judge is over-rejecting,
-   tightening the prompt to be more accepting of wording variation (while
-   keeping its "different statutory subsection" rule) would automatically
-   promote a chunk of currently-rejected candidates.
+4. ~~**Audit the "different" LLM verdicts.**~~ **Measured — see §4.** On the 30
+   adjudicated rows where Claude says `different` and Terra says `same`, the
+   auditor splits 16–14. The judge does over-reject, by roughly half what this
+   item assumed. What remains is acting on it: tightening the prompt to accept
+   wording variation while keeping the "different statutory subsection" rule.
 
 5. **Cadence analyzer needs more vocabulary.** The current regex misses
    "between X and Y after the end of fiscal year" and "within Z days of"
@@ -413,7 +426,7 @@ checks that an audit run can't do for you.
   true before the directory restructure; older shell history that `cd`s to
   the repo root first is harmless but no longer necessary.
 - **API rate limits.** Data.gov is 1000 req/hour; the fetcher throttles to
-  ~3/sec which is comfortably under. Anthropic and Gemini have their own
+  ~3/sec which is comfortably under. Anthropic and OpenAI have their own
   per-key limits — the judge uses 8 workers by default, lower if you see
   429s. OpenAI project keys additionally carry a per-project **model
   allowlist**: a model absent from it returns `403 model_not_found` naming
@@ -452,16 +465,18 @@ uv run python pipeline/plaw_fetch.py --limit 30    # pilot first
 uv run python pipeline/plaw_fetch.py --resolve-only
 ```
 
-**Headline: 3,171 of 3,297 Clerk claims (96.2%) can have their statutory text
+**Headline: 3,172 of 3,297 Clerk claims (96.2%) can have their statutory text
 inspected.** Ask for coverage *of the Clerk's claims*, not of USC citations —
 the latter is a flattering denominator that hides the uncodified third.
 
 | Route | Mandates | Share |
 |---|---|---|
 | US Code (`statute_fetch.py`) | 2,261 | 68.6% |
-| Public law (`plaw_fetch.py`) | 910 | 27.6% |
-| **Total inspectable** | **3,171** | **96.2%** |
-| Remaining | 126 | 3.8% |
+| Public law (`plaw_fetch.py`) | 911 | 27.6% |
+| **Total inspectable** | **3,172** | **96.2%** |
+
+(The 99.3% quoted under §Traps is a different denominator: USC citations resolved *excluding* the 15 sections absent from current law, 2,286/2,301. Against all USC citations it is 98.3%.)
+| Remaining | 125 | 3.8% |
 
 Codified detail, against release point **PL 119-102**:
 
@@ -476,7 +491,7 @@ Codified detail, against release point **PL 119-102**:
 | Unresolved: note cited but section has no operative notes | 25 |
 | Rows with no USC cite (uncodified) | 996 (30.2%) |
 
-The 126 that remain: **71** cite a title or division but no section
+The 125 that remain: **71** cite a title or division but no section
 (`Pub. L. 94-59, title III`), so there is no section to extract; **53** predate
 the 104th Congress and are outside PLAW entirely; **1** is a section the
 extractor could not locate.
@@ -546,8 +561,8 @@ US Code provision as negative. **The negatives are not clean.** This project
 exists because the Clerk's list is incomplete; a classifier trained that way
 learns its blind spots.
 
-Measured on the full corpus: the same lexical probe fires on **1.79%** of the
-~404k *uncited* provisions — roughly **7,200** provisions that look like
+Measured on the full corpus: the same lexical probe fires on roughly **1–2%** of the
+~541k *uncited* provisions — order **7,000** provisions that look like
 congressional reporting mandates but appear nowhere in the House Doc, against a
 list of 3,297. That number is a mixture of genuine omissions, agency-to-agency
 and public-facing reports, and expired one-offs. Separating those three is the
@@ -571,7 +586,7 @@ uv run python pipeline/mandate_classify.py --pilot --negatives 8000 --judge-n 30
 
 | stage | mechanism | measured on | volume |
 |---|---|---|---|
-| 1. recipient gate | regex, `passes_gate()` | **~72% recall** (frontier-audited) | 583,422 → **64,233** |
+| 1. recipient gate | regex, `passes_gate()` | **≥70% recall** (frontier-audited floor) | 583,422 → **64,233** |
 | 2. sweep | nemotron, thinking off | 95.6% recall / 82.6% prec **on gold** | — |
 | 3. confirm | gemma-26B | 93.9% / 94.7% **on gold** | — |
 | 4. currency | `currency.py` | — | drops 7.7% |
@@ -586,7 +601,7 @@ corpus — which is exactly why recall needed measuring rather than asserting.
 > and ~94.7% end-to-end. Both were wrong. The 99.1% was computed as 113/114 —
 > a raw count across two strata whose populations differ by **14×** (37k
 > gate-pass vs ~509k gate-fail). Size-weighted, the same gold data gives ~75%,
-> and a proper stratified study gives ~72%. **Never compute a rate across
+> and a proper stratified study gives a bounded ≤70.4% end-to-end (§Recall). **Never compute a rate across
 > strata without weighting by stratum size.**
 
 Ground truth is `data/gold/mandate_gold.json` — 467 rows (212 positive), Claude-
@@ -778,8 +793,8 @@ and ask the judge independently:
 
 | | |
 |---|---|
-| gap rows with a cite absent from the Clerk's list | 68 |
-| unique USC sections cited | 56 |
+| gap rows with a cite absent from the Clerk's list | 71 |
+| unique USC sections cited | 60 |
 | resolved to statutory text | 48 |
 | **independently confirm a congressional reporting duty** | **43 (90%)** |
 
@@ -821,7 +836,7 @@ The provision column reproduces audit 1 within noise on all three rows, which li
 
 #### Notes describe repealed duties, and the note says so
 
-**54% of the notes reaching `current` were not in force**, against 5.9% of provisions. The mechanism is structural rather than a tuning gap. A statutory note often exists *because* the underlying section was repealed — it is the editorial trace of a dead duty, written in the past tense — and the judge reads a description of a duty as a duty.
+**54% of the notes reaching `current` were not in force**, against 10.5% of provisions (both cumulative: a congressional report, recurring, and still in force). The mechanism is structural rather than a tuning gap. A statutory note often exists *because* the underlying section was repealed — it is the editorial trace of a dead duty, written in the past tense — and the judge reads a description of a duty as a duty.
 
 The evidence is legible in the note itself, and `currency.py` was missing all of it: every one of the 82 dead notes in the sample scored `current`. `_REVIEW_RE` looks for `repealed effective`, and repeal notes say *"Repealed by Pub. L. 93-…"* instead.
 
@@ -829,7 +844,7 @@ Widening that is a precision problem, so the pattern was chosen by measurement a
 
 | candidate | catches (of 82 dead) | kills (of 69 live) |
 |---|---|---|
-| `repealed by\|effective` | 1 | 0 |
+| `repealed\s+(?:by\|effective)` | 1 | 0 |
 | **bare `repeal`** | **41** | **0** |
 | `repeal\|terminat\|omitted` | 53 | 10 |
 
@@ -889,7 +904,7 @@ judge rather than trying to patch the recipient regex.
 
 **Statutory notes were never candidates.** `iter_provisions` yields only
 addressable USLM nodes and `_text_of` strips `<notes>`, so the sweep was blind
-to 40,762 notes — 9,833 of which name a congressional recipient. This is not a
+to 40,699 notes — 9,833 of which name a congressional recipient. This is not a
 tuning gap: 497 of the Clerk's own 3,297 mandates resolve to notes.
 `iter_notes()` closes it, synthesising `<section_id>/note/<n>` identifiers
 (stable per release point, but **not** USLM addresses — don't feed them back
@@ -909,7 +924,7 @@ CMRA's deposit obligation has two prongs: **chamber-directed** reports are cover
 `scoped_compliance.py` used to answer "we can't tell", and excluded 2,921 of 3,297 mandates on that basis — every compliance figure rested on 3% of the corpus. Its reason was sound but scoped to the wrong artifact: *the House Doc table* does not record destination. The **statute** does, and §10 had already resolved 96.2% of the Clerk's mandates to their operative text. Nothing joined the two.
 
 ```bash
-uv run python pipeline/destination.py              # tier distribution
+uv run python pipeline/destination.py              # GATE tiers only (pre-confirmation)
 uv run python pipeline/destination.py --sample 5   # worked examples per tier
 uv run python pipeline/destination.py --confirm    # re-judge the weak tiers (LLM, resumable)
 ```
@@ -934,7 +949,9 @@ So it is a gate, in the same shape as the sweep's: it narrows 3,172 mandates to 
 | unknown | 10 | 90.0% |
 | **overall** | **85** | **96.5%** |
 
-Corpus after confirmation: **208 chamber, 61 committee, 2,724 congress, 179 unknown**, and 125 mandates with no resolved text at all — those can never leave the upper bracket.
+Corpus after confirmation: **208 chamber, 61 committee, 2,724 congress, 179 unknown**, and 125 mandates with no resolved text at all — those can never leave the upper bracket. Note the gate's own distribution differs (260/23/2,624/265); the bare command prints that, and only `--confirm` reports the numbers above.
+
+**Both audits above were ad hoc and left no artifact.** `data/gold/destination.jsonl` holds the 525 `gpt-5.6-terra` confirmations, not the `claude-opus-5` adjudications that scored them, so the two precision tables cannot be re-checked without re-running. Same gap §12 records for its own adjudications.
 
 ### What it buys, and what it doesn't
 

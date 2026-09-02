@@ -1,7 +1,7 @@
 """LLM judge for fuzzy match candidates produced by match.py.
 
 Reads compare_output/candidates.jsonl (rows that the deterministic matcher
-flagged as plausible-but-uncertain), and asks Claude + Gemini whether each
+flagged as plausible-but-uncertain), and asks Claude + GPT-5.6-terra whether each
 (mandate, GPO record) pair refers to the same Congressional reporting mandate.
 
 Resumable: writes compare_output/match_judgments.jsonl incrementally and
@@ -285,7 +285,7 @@ def load_existing(path: Path) -> set[tuple[str, str]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--judges", default="claude,gemini", help="Comma-separated subset of: " + ",".join(JUDGES))
+    ap.add_argument("--judges", default="claude,openai", help="Comma-separated subset of: " + ",".join(JUDGES))
     ap.add_argument("--limit", type=int, default=None, help="Cap number of candidates to judge")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--workers", type=int, default=4)

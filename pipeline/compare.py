@@ -626,7 +626,7 @@ def write_report(
         "(USC / Public Law / Statutes at Large). **Stage B** handles packages where GPO didn't apply a "
         "requirement tag — matching by package `references` block (B1) or title+agency token jaccard (B2). "
         "Every Stage A attachment with low title overlap, every Stage B1 single-citation match, and every "
-        "Stage B2 candidate goes through an **LLM judge** (Claude + Gemini) before counting as confident. "
+        "Stage B2 candidate goes through an **LLM judge** (Claude + GPT-5.6-terra) before counting as confident. "
         "The judge correctly distinguishes \"covered by\" (e.g. every Labor rule is technically a CRA filing) "
         "from \"is the same mandate as.\"\n"
     )

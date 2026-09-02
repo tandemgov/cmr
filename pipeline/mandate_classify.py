@@ -337,8 +337,8 @@ _MODAL_RE = re.compile(r"(?i)\b(shall|must|is directed to|are directed to|is req
 # drafting separates the modal from the verb ("shall, as soon as practicable,
 # ... prepare and transmit to the Congress").
 #
-# Measured against data/gold/mandate_gold.json: 99.1% recall (113/114 positives
-# in a random 22-title sample), keeping 37,141 of 546,625 provisions (6.8%).
+# Recall here is a bounded <=70.4% end-to-end, not the 99.1% an earlier note claimed by pooling unweighted strata. RUNBOOK section 12.
+# The gate keeps 54,400 of 542,723 provisions.
 # Adding "duty AND delivery" terms drops recall to ~82-85% for no useful gain.
 # Embedding similarity was tried as an alternative and is far worse — AUC 0.71
 # on hard negatives, discarding almost nothing at usable recall.
@@ -420,7 +420,7 @@ def iter_notes(root: ET.Element, min_len: int = 120, max_len: int = 8000):
 
     Notes are not addressable USLM nodes, so ``iter_provisions`` never emits
     them — yet uncodified reporting duties routinely live there: 497 of the
-    House Document's own 3,297 mandates resolve to a statutory note, and 9,255
+    House Document's own 3,297 mandates resolve to a statutory note, and 9,833
     notes corpus-wide name a congressional recipient. Sweeping codified text
     alone is structurally blind to all of them.
 

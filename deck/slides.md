@@ -225,14 +225,14 @@ own text (97.5% audited), so the brackets are measured rather than assumed.
 # 6 · Finding two: the House Doc has gaps too
 
 **457 filings (39%) match nothing in the House Doc, after both passes.** Each is, by
-definition, congressionally mandated: it's in the CMR collection. They collapse to
+definition, congressionally mandated: it's in the CMR collection. 454 of them collapse to
 **334 distinct candidate gaps**, in three evidence tiers:
 
 <v-clicks>
 
 - **71 verified strongest**: the filing's own stated cite is absent from the entire Doc,
   and 6 of 8 spot-checked sections carry explicit committee-submission duties. Includes a
-  contiguous band of Coast Guard reporting statutes (14 U.S.C. 5111–5113, 719, 903, 1155)
+  contiguous band of Coast Guard reporting statutes (14 U.S.C. 5104, 5111, 5113, 5116, 719, 903, 1155)
   and Education's flagship **Condition of Education** (20 U.S.C. 9545)
 - **4 entities with zero rows anywhere**: EEOC, FLRA, Election Assistance Commission,
   Udall Foundation
@@ -262,7 +262,7 @@ Both findings are bounded by metadata quality. The fixes share one move:
   resolve to their operative text, and reading chamber-vs-committee out of it (97.5%
   audited) grows the defensible denominator 110 → 139. Cadence and duty-holder are next
 - **Transmittal letters as ground truth.** Every filed report states its own authority on
-  page one, and GPO has the PDFs. Extracting those closes the 172 cite-less gap clusters
+  page one, and GPO has the PDFs. Extracting those closes the 176 cite-less gap clusters
   and turns match corroboration into verification
 - **Adversarial verification** of the 719 LLM matches, weakest corroboration first
 
