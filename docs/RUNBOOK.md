@@ -945,14 +945,28 @@ It also drops what the confirm model labelled `one-time` (86) or `unknown` (20).
 | **mandates** | **2,553** — 2,417 recurring, 136 event-driven |
 | sections | 2,028 |
 
-**The count is audited in both directions** (`sweep_audit.py units`, `claude-opus-5`, 117 verdicts in `data/gold/adjudication_units_merge.jsonl`; the planned 150 stopped when the API balance ran out):
+**The count is audited in both directions** (`sweep_audit.py units`, `claude-opus-5`, 150 verdicts in `data/gold/adjudication_units_merge.jsonl`):
 
 | sample | question | result | extrapolated |
 |---|---|---|---|
 | 75 merged units | one duty? | 66 yes; 9 hold 2–3 | +0.147 duties × 1,320 merged units ≈ **+194** |
-| 42 same-section pairs | two duties? | 22 yes; 13 are one; 7 hold 3+ | 31% of the 525 surplus units ≈ **−162** |
+| 75 same-section pairs | two duties? | 36 yes; 29 are one; 10 hold 3+ | 38.7% of the 525 surplus units ≈ **−203** |
 
-The errors roughly cancel, so 2,553 stands within a few percent, on samples too small to say more. The undercount side is inflated a little: the auditor counted *any* duty, and the extra duties inside merged units are often one-time advance notifications rather than recurring reports. The residual echo that remains is almost all cadence disagreement between parent and child, e.g. `10 U.S.C. 10216(c)` "annual" vs `(c)(2)` "event-driven" for one budget-justification duty.
+The errors cancel to within about ten mandates, so 2,553 stands; the samples are too small to claim better than a few percent. The undercount side is inflated a little: the auditor counted *any* duty, and the extra duties inside merged units are often one-time advance notifications rather than recurring reports. The residual echo that remains is almost all cadence disagreement between parent and child, e.g. `10 U.S.C. 10216(c)` "annual" vs `(c)(2)` "event-driven" for one budget-justification duty.
+
+### Precision of the list
+
+Audited on the list itself, not on swept rows (`sweep_audit.py precision`, `claude-opus-5` at medium effort, 300 mandates, 150 per source, verdicts in `data/gold/adjudication_units_precision.jsonl`). Each claim is cumulative, and the frame column weights the strata back to their share of the 2,553:
+
+| Opus 5 confirms | provisions (2,308) | notes (245) | **frame, weighted** |
+|---|---|---|---|
+| is a congressional reporting duty | 147/150 | 148/150 | **98.1% ±2.0** |
+| …and is recurring | 145/150 | 148/150 | **96.9% ±2.6** |
+| …and is still in force | 139/150 (92.7%) | **115/150 (76.7%)** | **91.1% ±3.8** |
+
+That is roughly **2,330 mandates** that are real, recurring and live. It is higher than the row-level 88.1%, but the frames differ (mandates, not rows) and the samples do not isolate a cause. The one attributable change is the recurring claim: after dropping confirm-model one-time rows, only 2 of 300 fail it. Total spend for both audits was ~$5.80.
+
+**What remains is lapse, and it lives in notes.** 33 of the 35 note failures are duties that ended, against 6 of 11 provision failures. A notes-only pattern is visible in the verdicts and was not applied: **12 of the 33 dead notes cite the Federal Reports Elimination and Sunset Act** (`Pub. L. 104-66` or "May 15, 2000"), and every audited note matching that pattern is dead (12/12). It matches 16 notes in the list and 4 provisions. It was picked from this sample, so like the repeal screen it needs a held-out check before it becomes a `currency.py` rule. Dropping the 12 matches from the sample would put notes at 115/138 (83%).
 
 ### The published list
 
@@ -962,7 +976,7 @@ The errors roughly cancel, so 2,553 stands within a few percent, on samples too 
 
 - **Recall ≤70%** (63–80% band, §Recall). About 2,000 more mandates sit in gate-rejected text, and the next subsection says how to get them.
 - **Codified law and its notes only.** Session law that was neither codified nor printed as a note is not swept. About 30% of the Clerk's own rows are uncodified, so this gap is not small.
-- **Notes are the least reliable rows.** They are 9.6% of mandates but only 5.2% of rows, because a note never echoes into subsections. Per §Precision of the list, a note is far more likely than a provision to describe a lapsed duty.
+- **Notes are the least reliable rows.** They are 9.6% of mandates but only 5.2% of rows, because a note never echoes into subsections. Per §Precision of the list, 23% of notes describe a lapsed duty, against 7% of provisions.
 
 The two confirm-pass nulls from `sweep_confirmed.jsonl` are not in the list and cannot be retried until a confirm model is back on the host (§Endpoints).
 
