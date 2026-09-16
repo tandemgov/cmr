@@ -331,6 +331,8 @@ checks that an audit run can't do for you.
 | `pipeline/mandate_classify.py` | The US Code sweep for mandates the Clerk's list misses (see §12) |
 | `pipeline/currency.py` | Sunset / repeal screen over swept mandates — writes `sweep_live.jsonl` |
 | `pipeline/novelty.py` | Marks swept provisions already present in the Clerk's list |
+| `pipeline/mandate_units.py` | Collapses swept provisions into mandates and writes the published list (see §12) |
+| `pipeline/sweep_audit.py` | Frontier-model audits of the list: precision, and whether each mandate is counted once |
 | `pipeline/scoped_compliance.py` | Obligation-screened compliance rate (the defensible denominator) |
 | `extraction/judge.py`, `extraction/verify.py`, `extraction/verify_report.py` | The pre-existing extraction-accuracy harness (unrelated to the comparison flow) |
 | `data/CDOC-119hdoc4.pdf` | Source House Doc |
@@ -343,6 +345,8 @@ checks that an audit run can't do for you.
 | `data/usc/provisions.jsonl` | Every mandate with its citation resolved to statutory text |
 | `data/usc/plaw/cache/PLAW-*.{xml,htm}` | Raw public-law packages (gitignored) |
 | `data/usc/plaw_provisions.jsonl` | The uncodified mandates, resolved to public-law text |
+| `data/discovered/mandates.{jsonl,csv}` | Recurring congressional reporting mandates in the US Code that the Clerk's list lacks — tracked, a floor (§12) |
+| `data/gold/adjudication_units_*.jsonl` | `sweep_audit.py` verdicts: counting (`_merge`) and precision (`_precision`) |
 | `compare_output/REPORT.md` | Human-readable narrative summary |
 | `compare_output/AUDIT.md` | Reviewer audit document (executive summary + 7 systematic checks) |
 | `compare_output/final_matches.jsonl` | The authoritative confident-match set (deterministic + judge-promoted) |
@@ -634,6 +638,8 @@ null result off a sample this task can't support.
 | gemma-4-E2B | 8081 | llama.cpp | same |
 | gpt-oss-20b | 30000 | SGLang | `reasoning_effort` (needs thinking **on**) |
 
+> **The host was reconfigured by 2026-09-16, and the table above describes the run, not the host.** Ports 8080, 8082 and 30000 now refuse connections, so the sweep and confirm models that produced `sweep_live.jsonl` are gone, and neither pass can be resumed or extended as-is. What answers: `gemma-4-E2B` on 8081, `granite-embedding` on 8084, and **`nemotron-3-super` (120B-A12B) on 8085**, direct, one slot, thinking off via the same knob. On gold it scores **92.5% recall / 92.5% precision** (196 TP, 16 FP, 16 FN), between the old sweep and confirm models, at **0.27 items/s** — about a fifth of the old sweep's rate, so a pass of any size is measured in days. It is registered in `ENDPOINTS` as `nemotron-super`.
+
 **Do not send chat to the `:4000` proxy.** It silently drops
 `chat_template_kwargs`, so every request reasons: 146 completion tokens /
 2636 ms via the proxy versus 2 / 19 ms direct, and 0.19/s versus 1.26/s on the
@@ -916,6 +922,55 @@ Now `committees?\s+(?:on|of)`, plus `joint committee`, `congressional budget
 office`, `clerk of the house`, and `secretary of the senate`. Caught by a unit
 test, not by inspection; practical impact was smaller than feared (113
 provisions) because chapeau context usually supplied another matching token.
+
+### Counting mandates, not provisions
+
+**Every count above is a count of USLM nodes, and nodes are not duties.** Of the 5,601 `current` rows, 3,122 have a flagged ancestor that is also in the set. The chapeau repair causes it: a short section is emitted whole *and* each subsection is emitted with the section's lead-in prepended, and "shall submit … a report that provides the following: (1) … (11)" becomes eleven children that each carry the obligation. Counting sections errs the other way, since one section can hold several reports (15 U.S.C. 3721(m) and (n)). Do not quote 5,601, or the precision-adjusted ~4,934, as a number of mandates.
+
+```bash
+uv run python pipeline/mandate_units.py     # writes data/discovered/mandates.{jsonl,csv}
+```
+
+`mandate_units.py` merges only on evidence that two rows are one duty:
+
+1. A node folds into its nearest flagged ancestor when both name the same reporting entity (prefix-tolerant) and cadence.
+2. Siblings under one parent fold together when they share entity and cadence *and* their common text states the obligation, meaning the duty lives in the shared lead-in. Siblings that share only a heading stay apart.
+
+It also drops what the confirm model labelled `one-time` (86) or `unknown` (20). The novelty scope filtered on the *sweep* model's cadence, and the two models disagree often enough to let those through.
+
+| | |
+|---|---|
+| `current` rows | 5,601 |
+| kept (recurring or event-driven) | 5,495 |
+| **mandates** | **2,553** — 2,417 recurring, 136 event-driven |
+| sections | 2,028 |
+
+**The count is audited in both directions** (`sweep_audit.py units`, `claude-opus-5`, 117 verdicts in `data/gold/adjudication_units_merge.jsonl`; the planned 150 stopped when the API balance ran out):
+
+| sample | question | result | extrapolated |
+|---|---|---|---|
+| 75 merged units | one duty? | 66 yes; 9 hold 2–3 | +0.147 duties × 1,320 merged units ≈ **+194** |
+| 42 same-section pairs | two duties? | 22 yes; 13 are one; 7 hold 3+ | 31% of the 525 surplus units ≈ **−162** |
+
+The errors roughly cancel, so 2,553 stands within a few percent, on samples too small to say more. The undercount side is inflated a little: the auditor counted *any* duty, and the extra duties inside merged units are often one-time advance notifications rather than recurring reports. The residual echo that remains is almost all cadence disagreement between parent and child, e.g. `10 U.S.C. 10216(c)` "annual" vs `(c)(2)` "event-driven" for one budget-justification duty.
+
+### The published list
+
+`data/discovered/mandates.jsonl` and `.csv` are tracked, unlike everything else under `data/usc/`. One record per mandate: `citation`, `url` (uscode.house.gov), `reporting_entity`, `cadence`, `deadline`, `source` (`provision` or `note`), an 800-character excerpt, and `members`, the swept nodes it absorbed.
+
+**It is a floor on the US Code, not a list of everything the Clerk misses.** Three limits bound it:
+
+- **Recall ≤70%** (63–80% band, §Recall). About 2,000 more mandates sit in gate-rejected text, and the next subsection says how to get them.
+- **Codified law and its notes only.** Session law that was neither codified nor printed as a note is not swept. About 30% of the Clerk's own rows are uncodified, so this gap is not small.
+- **Notes are the least reliable rows.** They are 9.6% of mandates but only 5.2% of rows, because a note never echoes into subsections. Per §Precision of the list, a note is far more likely than a provision to describe a lapsed duty.
+
+The two confirm-pass nulls from `sweep_confirmed.jsonl` are not in the list and cannot be retried until a confirm model is back on the host (§Endpoints).
+
+### The recall pass that was not run
+
+The fix §Recall points at is to judge the gate-rejected text that states a duty and a delivery. The original stratum filter (37,576 items) was never checked in. Its size does pin it to the current reject set: 37,576 + 834 + 480,779 = 519,189, exactly what `passes_gate` rejects today. The closest reconstruction is `_MODAL_RE` plus a whole-word delivery verb (`submit|submits|transmit|transmits|report|reports|notify|notifies|furnish|furnishes|deliver|delivers`), which yields **42,311** items with 11.4M tokens of text.
+
+It was costed and deferred on 2026-09-16: ~44 hours on `nemotron-super` at 0.27/s, or roughly $25–29 (Haiku 4.5), $50–57 (Sonnet 5), or $125–145 (Opus 5, low effort) through the API before any confirm pass. At the audit's 5.5% hit rate, expect ~2,300 flagged provisions, which collapse to fewer mandates for the reason above. Whichever judge runs it must be scored on `mandate_gold.json` first, and its hits must go through `novelty.py`, `currency.py`, `mandate_units.py` and a precision audit as a separate stratum. Judged by a different model, they are not the same population as the rows above.
 
 ## 13. Reading destination out of the statute
 

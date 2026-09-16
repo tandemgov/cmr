@@ -55,6 +55,8 @@ class TestSectionOf:
         ("/us/usc/t42/s1396", "/us/usc/t42/s1396"),
         ("/us/usc/t12/s2279aa-10/b/4", "/us/usc/t12/s2279aa-10"),
         ("/us/usc/t5/s3341/a", "/us/usc/t5/s3341"),
+        # Appendix titles put the enacting public law in the path.
+        ("/us/usc/t18a/pl/96/456/s13/b", "/us/usc/t18a/pl/96/456/s13"),
     ])
     def test_reduces_any_node_to_its_section(self, node, expected):
         assert nv.section_of(node) == expected

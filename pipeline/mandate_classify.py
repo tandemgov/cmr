@@ -123,6 +123,8 @@ ENDPOINTS = {
     "nemotron": Endpoint("nemotron", 8082, n_ctx=16384),
     "gemma-26b": Endpoint("gemma-26b", 8080, n_ctx=2048),
     "gemma-e2b": Endpoint("gemma-e2b", 8081, n_ctx=2048),
+    # 120B-A12B, one slot. 92.5% recall / 92.5% precision on gold at 0.27/s — RUNBOOK section 12.
+    "nemotron-super": Endpoint("nemotron-super", 8085, n_ctx=16384),
     "gpt-oss": Endpoint("gpt-oss", 30000, model="openai/gpt-oss-20b",
                         thinking=True, max_tokens=700, n_ctx=8192),
 }

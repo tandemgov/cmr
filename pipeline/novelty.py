@@ -143,7 +143,7 @@ def _last_per_id(path: Path) -> dict[str, dict]:
 
 def section_of(uslm_id: str) -> str | None:
     """The enclosing section id for any addressable node."""
-    m = re.match(r"(/us/usc/t[0-9A-Za-z]+/s[0-9A-Za-z\-–]+)", uslm_id or "")
+    m = re.match(r"(/us/usc/t[0-9A-Za-z]+(?:/pl/\d+/\d+)?/s[0-9A-Za-z\-–]+)", uslm_id or "")
     return m.group(1) if m else None
 
 

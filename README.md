@@ -108,7 +108,7 @@ extractor reproduces the source faithfully, typos included.
 uv run pytest
 ```
 
-That runs the whole suite — **284 tests** across ten modules. The extractor's
+That runs the whole suite — **315 tests** across eleven modules. The extractor's
 own share is `tests/test_extract.py` (21) plus `tests/test_extraction_invariants.py`
 (7): exact-value checks against a hand-verified 46-row fixture (`tests/test_doc.pdf`),
 structural invariants, and regression tests against the full PDF (every authority
@@ -129,9 +129,12 @@ must close with `)`; no single-word orphan rows).
 | `pipeline/statute_fetch.py` | US Code fetch + citation→statutory-text resolution |
 | `pipeline/plaw_fetch.py` | Public-law text for the uncodified mandates |
 | `pipeline/mandate_classify.py` | Finds reporting mandates the Clerk's list misses — see [RUNBOOK §12](docs/RUNBOOK.md) |
+| `pipeline/mandate_units.py` | Counts those findings as mandates and writes `data/discovered/` — see [RUNBOOK §12](docs/RUNBOOK.md) |
+| `pipeline/sweep_audit.py` | Frontier-model audits of the discovered list |
 | `pipeline/destination.py` | Reads chamber-vs-committee destination from statutory text — see [RUNBOOK §13](docs/RUNBOOK.md) |
 | `pipeline/scoped_compliance.py` | The obligation-screened compliance denominator and its brackets |
 | `data/gold/mandate_gold.json` | 467-row adjudicated gold set for judging the judges |
+| `data/discovered/mandates.{jsonl,csv}` | Recurring reporting mandates in the US Code that the Clerk's list lacks (a floor) |
 | `experiments/dspy_judge.py` | Does an optimizer beat the handwritten judge prompt? — see [RUNBOOK §12](docs/RUNBOOK.md) |
 | `docs/approach.md` | Technical design document (extractor) |
 | `docs/RUNBOOK.md` | Reviewer runbook for the comparison pipeline |
