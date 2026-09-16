@@ -1,0 +1,34 @@
+Analyze the legal provision and extract all mandate components in a single pass.
+
+**Step 1: Determine is_mandate**
+Answer TRUE only if the provision obligates a federal officer, agency, commission, or entity to deliver a report, study, notification, certification, plan, or other information TO Congress (including chambers, committees, subcommittees, leadership, or the Comptroller General acting for Congress).
+
+Answer FALSE if:
+- The recipient is not Congress (agency head, court, state, public, registry)
+- The text only defines terms, authorizes appropriations, grants rulemaking authority, or establishes a body without requiring congressional reporting
+- It merely cross-references a reporting duty created elsewhere
+
+**Step 2: Extract recipient**
+Answer with exactly one of "congress", "agency", "public", "other", or "none". A chamber, committee, subcommittee, leadership office, or the Comptroller General acting for Congress all count as "congress".
+
+**Step 3: Extract reporting_entity**
+Identify who must fulfill the mandate: the Task Force, Administrator, Secretary, agency, commission, or other entity obligated to report or notify. Leave empty if the text does not say.
+
+**Step 4: Extract deadline**
+Quote the exact temporal language from the text: "not later than 90 days after December 23, 2024", "promptly", "within 180 days after notice", "March 31, 2025." Leave empty if no deadline exists.
+
+**Step 5: Determine frequency** (CRITICAL—most error-prone field)
+- **"one-time"**: Single discharge with no repetition signal. "Not later than 180 days after enactment" with no "thereafter" or "annually" = one-time.
+- **"annual" / "biennial" / "quarterly" / "semiannual" / "monthly"**: Requires explicit repetition language: "annually", "each year", "every 2 years", "for each fiscal year", "and annually thereafter", "quarterly basis", "twice each year." Look for "thereafter", "each", "every."
+- **"event-driven"**: Recurs conditionally: "upon each determination", "whenever the Secretary finds", "in the case of any such waiver."
+- **"other"**: A stated cadence that fits none of the above.
+- **"unknown"**: Duty stated but timing unclear.
+
+Remember: A deadline is NOT a cadence. Decide from the text, not the topic.
+
+**Step 6: Assess confidence**
+- **"high"**: Clear mandate language, explicit recipient, identifiable reporting entity, and unambiguous deadline/frequency.
+- **"medium"**: Some ambiguity in one or two components but core mandate is evident.
+- **"low"**: Substantial uncertainty in interpretation, vague language, or missing critical elements.
+
+Output all six fields: is_mandate, recipient, reporting_entity, deadline, frequency, confidence.

@@ -1,0 +1,46 @@
+{
+  "traces": [],
+  "train": [],
+  "demos": [],
+  "signature": {
+    "instructions": "Analyze the legal provision and extract all mandate components in a single pass.\n\n**Step 1: Determine is_mandate**\nAnswer TRUE only if the provision obligates a federal officer, agency, commission, or entity to deliver a report, study, notification, certification, plan, or other information TO Congress (including chambers, committees, subcommittees, leadership, or the Comptroller General acting for Congress).\n\nAnswer FALSE if:\n- The recipient is not Congress (agency head, court, state, public, registry)\n- The text only defines terms, authorizes appropriations, grants rulemaking authority, or establishes a body without requiring congressional reporting\n- It merely cross-references a reporting duty created elsewhere\n\n**Step 2: Extract recipient**\nIdentify who receives the mandate: \"congress\", \"congressional_committee\", specific agency names, or \"not_congress\". Be specific when the text names particular committees or chambers.\n\n**Step 3: Extract reporting_entity**\nIdentify who must fulfill the mandate: the Task Force, Administrator, Secretary, agency, commission, or other entity obligated to report or notify. If unclear from the text, state \"unclear\" or \"not specified.\"\n\n**Step 4: Extract deadline**\nQuote the exact temporal language from the text: \"not later than 90 days after December 23, 2024\", \"promptly\", \"within 180 days after notice\", \"March 31, 2025.\" If no deadline exists, state \"not specified.\"\n\n**Step 5: Determine frequency** (CRITICAL—most error-prone field)\n- **\"one-time\"**: Single discharge with no repetition signal. \"Not later than 180 days after enactment\" with no \"thereafter\" or \"annually\" = one-time.\n- **\"annual\" / \"biennial\" / \"quarterly\" / \"monthly\"**: Requires explicit repetition language: \"annually\", \"each year\", \"every 2 years\", \"for each fiscal year\", \"and annually thereafter\", \"quarterly basis.\" Look for \"thereafter\", \"each\", \"every.\"\n- **\"event-driven\"**: Recurs conditionally: \"upon each determination\", \"whenever the Secretary finds\", \"in the case of any such waiver.\"\n- **\"unknown\"**: Duty stated but timing unclear.\n\nRemember: A deadline is NOT a cadence. Decide from the text, not the topic.\n\n**Step 6: Assess confidence**\n- **\"high\"**: Clear mandate language, explicit recipient, identifiable reporting entity, and unambiguous deadline/frequency.\n- **\"medium\"**: Some ambiguity in one or two components but core mandate is evident.\n- **\"low\"**: Substantial uncertainty in interpretation, vague language, or missing critical elements.\n\nOutput all six fields: is_mandate, recipient, reporting_entity, deadline, frequency, confidence.",
+    "fields": [
+      {
+        "prefix": "Provision:",
+        "description": "Federal statutory text, with ancestor num/heading/chapeau prepended."
+      },
+      {
+        "prefix": "Is Mandate:",
+        "description": "True only if the text obligates someone to deliver information to Congress."
+      },
+      {
+        "prefix": "Recipient:",
+        "description": "Who receives the required information."
+      },
+      {
+        "prefix": "Reporting Entity:",
+        "description": "Who must report; empty if none."
+      },
+      {
+        "prefix": "Deadline:",
+        "description": "Stated deadline or trigger; empty if none."
+      },
+      {
+        "prefix": "Frequency:",
+        "description": "Cadence, decided from the text not the topic."
+      },
+      {
+        "prefix": "Confidence:",
+        "description": "${confidence}"
+      }
+    ]
+  },
+  "lm": null,
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.13",
+      "dspy": "3.2.1",
+      "cloudpickle": "3.1"
+    }
+  }
+}

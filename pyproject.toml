@@ -1,12 +1,13 @@
 [project]
 name = "cmra"
 version = "0.1.0"
-description = "Deterministic structured data extraction from government PDF report tables"
+description = "Congressionally Mandated Reports Act compliance: House Doc extraction joined against GPO filings"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.103.1",
     "google-genai>=2.5.0",
+    "numpy>=2.5.1",
     "openai>=2.37.0",
     "pdfplumber>=0.11.9",
     "pillow>=12.1.1",
@@ -15,8 +16,18 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
-[project.scripts]
-cmra = "main:main"
+[project.optional-dependencies]
+dspy = [
+    "dspy>=3.2.1",
+    "optuna>=4.9.0",
+]
 
+# The pipeline is a set of standalone scripts rather than an installed package;
+# both script directories go on the path so intra-directory imports
+# (`from normalize import ...`, `from extract import ...`) resolve under pytest.
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["extraction", "pipeline"]
+markers = [
+    "slow: whole-document invariants against the real source PDF (~1 min); skip with -m 'not slow'",
+    "uses_endpoint_probe: exercises the live-endpoint guard itself; opts out of the no-network fixture",
+]

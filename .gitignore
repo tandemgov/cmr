@@ -22,6 +22,24 @@ wheels/
 # raw LLM-judge verdicts) — all reproducible via verify_report.py / judge.py
 verify_output/
 
+# Generated GPO comparison artifacts (cached govinfo CMR packages,
+# derived views, match output) — reproducible via gpo_fetch.py / match.py / compare.py
+data/gpo/
+compare_output/
+
+# Cached House Doc extract — deterministically rebuilt from the tracked PDF
+# by match.py on first run if absent.
+data/cmra_extract.jsonl
+
+# US Code corpus and resolved statutory text (~814 MB: a 108 MB OLRC release-point
+# archive, 665 MB of extracted USLM XML, plus derived views). Reproducible via
+# statute_fetch.py, which re-downloads the current release point on demand.
+data/usc/
+
+# Slidev build cache, written into the repo root when the deck is served
+# from here via `npx slidev slides.md`.
+node_modules/
+
 # Editor / OS / local agent state
 .DS_Store
 .claude/

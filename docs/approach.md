@@ -2,7 +2,7 @@
 
 ## As-Built Design Notes
 
-> This document describes the system as implemented in `extract.py`, which is
+> This document describes the system as implemented in `extraction/extract.py`, which is
 > the source of truth. An earlier version of this file was a pre-build design
 > doc that diverged from the final implementation; this version reflects what
 > was actually built and validated.
@@ -47,7 +47,7 @@ Target schema per row:
   randomness. Given the same PDF it always produces the same rows. (An LLM
   *cleanup* stage was considered in the original design but **not built** — it
   proved unnecessary. The only place an LLM appears is the offline validation
-  harness in `judge.py`, which judges already-extracted rows against the source
+  harness in `extraction/judge.py`, which judges already-extracted rows against the source
   but never feeds back into extraction.)
 - **Work at the character level, in PDF coordinates.** Because the text matrix
   is rotated, `pdfplumber`'s word grouping is unreliable. We operate on raw
@@ -91,7 +91,7 @@ call structure:
 
 ```mermaid
 flowchart TD
-    PDF["PDF Input"] --> FDP["Find Data Pages<br/><code>_find_data_pages()</code><br/>Rotated chars > 50% AND expected title"]
+    PDF["PDF Input"] --> FDP["Find Data Pages<br/><code>_find_data_pages()</code><br/>Rotated: >50% rotated chars AND title<br/>Upright: title only (6 pages, §5.1a)"]
 
     FDP --> DTC["Detect Title Cutoff<br/><code>_detect_title_cutoff()</code><br/>Header-box vertical lines → x0 threshold"]
     FDP --> DCB["Detect Column Boundaries<br/><code>_detect_column_boundaries()</code><br/>Horizontal grid lines → 2 top thresholds<br/>(per page, with fallback)"]
@@ -106,7 +106,8 @@ flowchart TD
         FDL --> FPN["Filter Page Numbers<br/><code>_filter_page_number_chars()</code><br/>Drop digit-only text at max x0"]
         FPN --> DEDUP["Deduplicate Bold Chars<br/><code>_deduplicate_chars()</code><br/>Merge chars within 1pt x0 + 1pt top"]
         DEDUP --> GVR["Group into Visual Rows<br/><code>_group_into_visual_rows()</code><br/>Cluster by x0 proximity (2pt)"]
-        GVR --> CLASSIFY{"Classify each row"}
+        GVR --> DPN["Drop Page-Number Rows<br/><code>_is_page_number()</code>"]
+        DPN --> CLASSIFY{"Classify each row"}
         CLASSIFY -->|"Bold font, col 0 only"| ENT["Entity Header"]
         CLASSIFY -->|"Otherwise"| DATA["Data Line<br/>Split chars by top → nature, authority, when"]
     end
@@ -138,11 +139,33 @@ flowchart TD
 
 ### 5.1 — Page selection · `_find_data_pages`
 
-Iterates every page and keeps those where (a) more than 50% of chars are
-rotated (`upright == False`) and (b) the page title matches
-`"LIST OF REPORTS WHICH IT IS THE DUTY"` (`_has_expected_title`). The title
-check is what excludes index/appendix sections that share the rotation but have
-a different structure. Returns `(1-based page number, page)` tuples.
+Iterates every page and keeps two kinds. **Rotated** pages are those where (a) more
+than 50% of chars are rotated (`upright == False`) and (b) the page title matches
+`"LIST OF REPORTS WHICH IT IS THE DUTY"` (`_has_expected_title`). The title check
+excludes index/appendix sections that share the rotation but have a different
+structure. **Upright** pages are kept when `_has_expected_title_upright` passes,
+regardless of the rotation test. Returns `(1-based page number, page, is_rotated)`
+triples.
+
+### 5.1a — The upright pages
+
+Six pages of this document (20, 183, 184, 186, 420, 421) are typeset upright
+rather than rotated, and they carry **47 mandates** — including every Nuclear
+Regulatory Commission row. An early version selected on rotation alone and
+dropped all of them; recovering them is what moved the extract from 3,250 to
+3,297 rows (RUNBOOK §6).
+
+They get a full parallel function set, because none of the rotated pipeline's
+coordinate assumptions hold: `_detect_layout_upright`, `_filter_dot_leaders_upright`,
+`_filter_page_number_chars_upright`, `_group_into_visual_rows_upright`,
+`_chars_to_text_upright`, `_assign_column_upright`, and `_extract_page_upright`.
+On an upright page the §3 table does not apply — rows group by `top` and columns
+split by `x0`, the ordinary way round.
+
+`tests/test_extraction_invariants.py` pins the split at 436 data pages, 430
+rotated and 6 upright, and asserts the sentinel entities survive. That test is
+the guard against silently losing this path again — see the warning in
+`extraction/verify.py`, which lost every upright page when this was added.
 
 ### 5.2 — Self-calibration · `_detect_title_cutoff`, `_detect_column_boundaries`
 
@@ -242,7 +265,7 @@ _CITATION_START = re.compile(
 
 ## 6. Output
 
-`main.py` emits the merged rows in one of three formats — JSON Lines (default),
+`extraction/main.py` emits the merged rows in one of three formats — JSON Lines (default),
 a JSON array, or CSV — each record being exactly the four schema fields. There
 are no confidence scores or review flags; the deterministic output is taken as
 canonical. The full document produces **3,297 rows**.
@@ -258,15 +281,18 @@ canonical. The full document produces **3,297 rows**.
 Because the pipeline is deterministic, "is it correct?" is answered empirically,
 not by confidence heuristics. Two layers:
 
-1. **Unit + regression tests** (`tests/test_extract.py`, 21 tests) against a
-   hand-verified 46-row fixture (`tests/test_doc.pdf`) plus structural
-   invariants over the full PDF:
+1. **Unit + regression tests** — `tests/test_extract.py` (21) against a
+   hand-verified 46-row fixture (`tests/test_doc.pdf`), plus
+   `tests/test_extraction_invariants.py` (7) for the full-PDF baselines: row
+   count 3,297, the 436/430/6 page split, page-tracking agreement, and the
+   sentinel-entity guard. The repo's full suite is 284 tests across ten modules.
+   Structural invariants over the full PDF:
    - every `authority` closes with `)` (guards the mid-citation merge bug),
    - no single-word row with an empty `when_expected` (orphan-row guard),
    - every row has a non-empty nature and a citation-bearing authority,
    - no residual `..` dot-leader artifacts.
 
-2. **LLM-as-judge audit** (`verify.py`, `verify_report.py`, `judge.py`): a
+2. **LLM-as-judge audit** (`extraction/verify.py`, `extraction/verify_report.py`, `extraction/judge.py`): a
    seeded random sample of rows is rendered against its source page and judged
    by up to three independent vision models (Claude, Gemini, OpenAI). Every
    disagreement is adjudicated by hand against the PDF.
@@ -289,11 +315,12 @@ not by confidence heuristics. Two layers:
 | Package | Purpose |
 |---|---|
 | `pdfplumber` | Char-level extraction with positions and font metadata |
+| `numpy` | Required by the extraction path (`pyproject.toml`) |
 | `pydantic` | The `Report` model (`schema.py`) |
 | `pytest` | Test suite |
-| `anthropic`, `google-genai`, `openai` | LLM-judge harness (`judge.py`) only |
-| `pillow` | Page-image rendering for the QA report (`verify_report.py`) only |
-| `python-dotenv` | Loads API keys from `.env` for `judge.py` |
+| `anthropic`, `google-genai`, `openai` | LLM-judge harness (`extraction/judge.py`) only |
+| `pillow` | Page-image rendering for the QA report (`extraction/verify_report.py`) only |
+| `python-dotenv` | Loads API keys from `.env` for `extraction/judge.py` |
 
 Requires Python ≥ 3.13. `tabula-py` and `camelot` were evaluated and rejected
 for this document class — both fail to detect the table (no machine-readable
